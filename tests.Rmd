@@ -1,0 +1,204 @@
+---
+title: "Testing the ViParc dataset"
+csl: the-american-naturalist.csl
+output:
+  html_document:
+    theme: cerulean
+    toc: yes
+  pdf_document:
+    toc: yes
+<!-- bibliography: references.bib -->
+editor_options: 
+  chunk_output_type: console
+---
+
+<!--
+IMAGES:
+Insert them with: ![alt text](image.png)
+You can also resize them if needed: convert image.png -resize 50% image.png
+If you want to center the image, go through HTML code:
+<div style="text-align:center"><img src ="image.png"/></div>
+
+REFERENCES:
+For references: Put all the bibTeX references in the file "references.bib"
+in the current folder and cite the references as @key or [@key] in the text.
+Uncomment the bibliography field in the above header and put a "References"
+title wherever you want to display the reference list.
+-->
+
+<style type="text/css">
+.main-container {
+  max-width: 1370px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+```{r general_options, include = FALSE}
+knitr::knit_hooks$set(
+  margin = function(before, options, envir) {
+    if (before) par(mgp = c(1.5, .5, 0), bty = "n", plt = c(.105, .97, .13, .97))
+    else NULL
+  },
+  prompt = function(before, options, envir) {
+    options(prompt = if (options$engine %in% c("sh", "bash")) "$ " else "> ")
+  })
+
+knitr::opts_chunk$set(margin = TRUE, prompt = TRUE, comment = "",
+                      collapse = TRUE, cache = FALSE, autodep = TRUE,
+                      dev.args = list(pointsize = 11), fig.height = 3.5,
+                      fig.width = 4.24725, fig.retina = 2, fig.align = "center")
+
+options(width = 137)
+```
+
+## Packages
+
+Installing required packages:
+
+```{r}
+required <- c("dplyr", "magrittr", "tibble")
+to_install <- which(! required %in% row.names(installed.packages()))
+if (length(to_install) > 0) install.packages(to_install)
+```
+
+Loading `magrittr`:
+
+```{r}
+library(magrittr)
+```
+
+## Utilitary functions
+
+A utilitary function that completes a `table` vector with integer names, making
+it start at 0 and progress by step of 1:
+
+```{r}
+complete_vector <- function(x) {
+  the_names <- as.integer(names(x))
+  new_names <- as.character(0:max(the_names))
+  out <- setNames(rep(0, length(new_names)), new_names)
+  out[names(x)] <- x
+  out
+}
+```
+
+## Loading the dataset
+
+Loading the dataset:
+
+```{r}
+download.file("https://raw.github.com/viparc/prophylactic/master/data/viparc.csv", "viparc.csv")
+viparc <- "viparc.csv" %>%
+  read.csv(stringsAsFactors = FALSE) %>% 
+  tibble::as_tibble()
+file.remove("viparc.csv")
+```
+
+## Farms, cycles and weeks
+
+Number of farms:
+
+```{r}
+length(unique(viparc$USUBJID))
+```
+
+The total number of cycles:
+
+```{r}
+viparc %>%
+  dplyr::select(USUBJID, FLOCKSEQUENCE) %>%
+  unique() %>%
+  nrow()
+```
+
+The total number of weeks:
+
+```{r}
+nrow(viparc)
+```
+
+The distribution of the number of cycles per farm:
+
+```{r}
+viparc %>%
+  dplyr::select(USUBJID, FLOCKSEQUENCE) %>%
+  unique() %>%
+  dplyr::group_by(USUBJID) %>%
+  dplyr::tally() %>%
+  dplyr::ungroup() %$%
+  table(n)
+```
+
+The distribution of the number of weeks per cycle:
+
+```{r}
+viparc %>%
+  dplyr::group_by(USUBJID, FLOCKSEQUENCE) %>%
+  dplyr::tally() %>% 
+  dplyr::ungroup() %$%
+  table(n) %>% 
+  complete_vector() %>% 
+  print() %T>% 
+  barplot()
+```
+
+Checking for missing weeks:
+
+```{r}
+viparc %>%
+  dplyr::group_by(USUBJID, FLOCKSEQUENCE) %>%
+  dplyr::arrange(WEEK) %>%
+  dplyr::summarise(d = length(unique(diff(WEEK)))) %>%
+  dplyr::ungroup() %>%
+  dplyr::filter(d > 1)
+```
+
+## Drugs
+
+The drugs:
+
+```{r}
+ab <- dplyr::select(viparc, dplyr::matches("^[a-z]", FALSE))
+```
+
+The names of drugs, sorted alphabetically:
+
+```{r}
+ab %>% 
+  names() %>% 
+  sort()
+```
+
+The drugs ordered by usage:
+
+```{r}
+sort(colSums(ab), TRUE)
+```
+
+The same in proportion of the number of weeks:
+
+```{r}
+round(100 * sort(colSums(ab), TRUE) / nrow(viparc))
+```
+
+A histogram of the drug usage:
+
+```{r}
+barplot(sort(colSums(ab), TRUE))
+```
+
+The number of drugs per week:
+
+```{r}
+table(rowSums(ab))
+```
+
+In proportion of the total number of weeks:
+
+```{r}
+round(100 * table(rowSums(ab)) / nrow(viparc))
+```
+
+
+
