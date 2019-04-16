@@ -81,6 +81,7 @@ dplyr::anti_join(amu, symptoms, by = c("USUBJID", "FLOCKSEQUENCE", "WEEKNO" = "W
 
 # Merging:
 viparc <- dplyr::left_join(symptoms, amu, by = c("USUBJID", "FLOCKSEQUENCE", "WEEK" = "WEEKNO")) %>% 
+  replace(is.na(.), FALSE) %>%
   dplyr::mutate_at(dplyr::vars(FLOCKSEQUENCE, WEEK), as.integer) %>% 
   dplyr::arrange(USUBJID, FLOCKSEQUENCE, WEEK)
 
