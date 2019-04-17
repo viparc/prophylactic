@@ -1,7 +1,8 @@
 library(readxl)
 library(magrittr)
 
-data_folder <- "../data from CliRes"
+#data_folder <- "../data from CliRes"
+data_folder <- "../data"
 files <- dir(data_folder, full.names = TRUE)
 
 read_excel_file <- function(x) {
