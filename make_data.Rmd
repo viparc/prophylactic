@@ -1,5 +1,5 @@
 ---
-title: "Generating the data from the CliRes database"
+title: "Preparing the data"
 csl: the-american-naturalist.csl
 output:
   html_document:
@@ -8,8 +8,6 @@ output:
   pdf_document:
     toc: yes
 <!-- bibliography: references.bib -->
-editor_options: 
-  chunk_output_type: console
 ---
 
 <!--
@@ -57,8 +55,8 @@ options(width = 137)
 Installing the required packages:
 
 ```{r}
-required <- c("dplyr", "magrittr", "purrr", "readxl", "tibble", "tidyr")
-to_install <- which(! required %in% row.names(installed.packages()))
+required <- c("magrittr", "readr")
+to_install <- setdiff(required, row.names(installed.packages()))
 if (length(to_install)) install.packages(to_install)
 ```
 
@@ -68,228 +66,23 @@ Loading `magrittr`:
 library(magrittr)
 ```
 
-## Utilitary funtion
+## Loading the data ViParc data
 
 ```{r}
-lapply2 <- function(X, FUN, ...) setNames(lapply(X, FUN, ...), X)
+viparc <- readr::read_csv("https://raw.githubusercontent.com/viparc/clires_data/master/data/viparc.csv",
+                          col_types = paste(c("cii", rep("l", 6), rep("d", 45), "lil"), collapse = ""))
 ```
 
-## Additional data
+## Transforming the AMU into qualitative information
 
-ESVAC data from EIO report. Note that we have to get rid off one of the colistin
-data and to manually add the data for josamycin.
-
-```{r}
-esvac <- read.csv("data/esvac.csv") %>% 
-  dplyr::filter(!grepl("methane", ab_vet_med)) %>% 
-  dplyr::select(ab_oie, mg.IU) %>% 
-  dplyr::mutate(ab_oie = sub(" .*$", "", tolower(ab_oie))) %>% 
-  dplyr::bind_rows(data.frame(ab_oie = "josamycin",
-                              mg.IU  = 0.001, stringsAsFactors = FALSE)) %$%
-  setNames(mg.IU, ab_oie)
-```
-
-## ViParc data
-
-The ViParc data are in 2 excel files, each with many tabs. The name of one of
-the files contains the pattern `Category`: this is the file that contains
-general information. The other file contains the surveillance data. The names of
-these two files start with the following pattern:
-
-```{r}
-clires_folder <- "../data from CliRes/16-4-2019-_18ZN_"
-```
-
-For antimicrobial, disease and chicken data in the surveillance file, we need
-the following pairs of tabs respectively, that we have to merge:
-
-```{r}
-antimicrobial <- c("ANTIMICROBIAL", "ANTIMICROBIAL_GridEvent")
-disease <- c("DISEASE", "DISEASE_GridEvent")
-chicken <- c("MID_INOUT", "MID_INOUT_GridEvent")
-```
-
-### Drug codes from general information data
-
-Here we'll merge with the `esvac` dataframe that we generated above.
-
-```{r}
-drug_codes <- c("ANTIMICROBIAL", "ANTIMICROBIAL_GridAnti") %>% 
-  lapply(readxl::read_excel, path = paste0(clires_folder, "Category_V1_Data.xls")) %>% 
-  purrr::invoke(dplyr::right_join, ., "ANTIMICROBIAL_SEQ") %>% 
-  dplyr::select(CODE, ANTINAME1, CONCENTRATION, GRIDUNIT, GRIDPACK, GRIDPACKUNIT) %>%
-  dplyr::filter(! ANTINAME1 %in% c("alicin", "axit oxolinic", "iodo-hydroxyquinoline", "metronidazol", "nystatin")) %>% 
-  dplyr::mutate(ANTINAME1     = dplyr::recode(ANTINAME1, sunfadimethoxine  = "sulfadimethoxine",
-                                                         sunphamethoxazole = "sulphamethoxazole"),
-                GRIDUNIT      = dplyr::na_if(GRIDUNIT, "NA"),
-                GRIDUNIT      = dplyr::na_if(GRIDUNIT, "na"),
-                GRIDUNIT      = dplyr::recode(GRIDUNIT, UI = "IU", mg = "MG"),
-                GRIDPACKUNIT  = dplyr::na_if(GRIDPACKUNIT, "na"),
-                GRIDPACKUNIT  = dplyr::na_if(GRIDPACKUNIT, "VI"),
-                GRIDPACKUNIT  = dplyr::recode(GRIDPACKUNIT, g  = "G", ml = "G", ML = "G"),
-                CONCENTRATION = dplyr::na_if(CONCENTRATION, "NA"),
-                CONCENTRATION = dplyr::na_if(CONCENTRATION, "na"),
-                CONCENTRATION = dplyr::recode(CONCENTRATION, S = "500"), # this will ultimately be corrected in CliRes
-                CONCENTRATION = as.numeric(CONCENTRATION),
-                CONCENTRATION = ifelse(GRIDUNIT == "IU", CONCENTRATION * esvac[ANTINAME1], CONCENTRATION),
-                GRIDUNIT      = ifelse(GRIDUNIT == "IU", "MG", GRIDUNIT), # HAS TO BE HERE!!!
-                CONCENTRATION = ifelse(GRIDUNIT == "MG", CONCENTRATION / 1000, CONCENTRATION),
-                GRIDUNIT      = ifelse(GRIDUNIT == "MG", "G", GRIDUNIT), # HAS TO BE HERE!!!
-                GRIDPACK      = dplyr::na_if(GRIDPACK, "na"),
-                GRIDPACK      = as.numeric(GRIDPACK),
-                GRIDPACK      = ifelse(GRIDPACKUNIT == "KG", 1000 * GRIDPACK, GRIDPACK),
-                GRIDPACKUNIT  = ifelse(GRIDPACKUNIT == "KG", "G", GRIDPACKUNIT), # HAS TO BE HERE!!! 
-                proportion    = CONCENTRATION / GRIDPACK)
-```
-
-### The surveillance data
-
-```{r}
-surveillance <- c(antimicrobial, disease, chicken, "SAMPLE") %>%
-  lapply2(readxl::read_excel, path = paste0(clires_folder, "V1_Data.xls"))
-```
-
-#### Sampling dates
-
-```{r}
-samplesdata <- surveillance$SAMPLE %>% 
-  dplyr::select(USUBJID, FLOCKSEQUENCE, SAMPLINGDATE, SAMPLINGVISIT)
-```
-
-Here we have to break the pipeline because we need to use the `samplesdata` at
-two distincts points in the section that follows:
-
-```{r}
-samples <- samplesdata %>%
-  dplyr::filter(SAMPLINGVISIT == "S") %>%
-  dplyr::select(-SAMPLINGVISIT) %>%
-  dplyr::rename(start = SAMPLINGDATE) %>%
-  dplyr::right_join(samplesdata, c("USUBJID", "FLOCKSEQUENCE")) %>%
-  dplyr::mutate(WEEK     = as.integer(floor((SAMPLINGDATE - start) / (60 * 60 * 24 * 7)) + 1),
-                sampling = TRUE) %>% 
-  dplyr::select(-start, -SAMPLINGDATE, -SAMPLINGVISIT)
-```
-
-#### Numbers of chicken
-
-```{r}
-chickdata <- surveillance[chicken] %>% 
-  unname() %>% 
-  purrr::invoke(dplyr::left_join, ., c("USUBJID", "MID_INOUT_SEQ")) %>% 
-  dplyr::select(USUBJID, FLOCKSEQUENCE, WEEK, CHICKENTOTAL) %>% 
-  dplyr::mutate_at("CHICKENTOTAL", as.integer)
-```
-
-#### Antimicrobial usage
-
-Here we'll merge with the `drug_codes` dataframe that we generated above.
-
-```{r}
-amu <- surveillance[antimicrobial] %>% 
-  unname() %>% 
-  purrr::invoke(dplyr::left_join, ., c("USUBJID", "ANTIMICROBIAL_SEQ")) %>% 
-  dplyr::select(USUBJID, FLOCKSEQUENCE, WEEKNO, CODE, AMOUTUSED, PACKAGEUNIT) %>%
-  na.exclude() %>% 
-  dplyr::mutate(PACKAGEUNIT = dplyr::na_if(PACKAGEUNIT, "TAB")) %>% 
-  dplyr::left_join(drug_codes, "CODE") %>%
-  tidyr::replace_na(list(ANTINAME1 = "unknown")) %>% # because some antibiotic names are unknown
-  dplyr::mutate(presence   = 1,
-                antibiotic = proportion * AMOUTUSED,
-                antiname   = toupper(ANTINAME1)) %>%
-  dplyr::select(USUBJID, FLOCKSEQUENCE, WEEKNO, ANTINAME1, presence, antibiotic, antiname) %>% 
-  tibble::rowid_to_column() %>% # spread require unique row identifiers
-  tidyr::spread(ANTINAME1, presence) %>%
-  tidyr::spread(antiname, antibiotic) %>%
-  dplyr::select(-rowid) %>% # we don't need rowid anymore
-  replace(is.na(.), 0) %>%
-  dplyr::group_by(USUBJID, FLOCKSEQUENCE, WEEKNO) %>%
-  dplyr::summarise_all(~sum(.)) %>%
-  dplyr::mutate_at(dplyr::vars(dplyr::matches("^[a-z]", FALSE)), function(x) x > 0)
-```
-
-#### Clinical signs
-
-```{r}
-raw_symptoms <- surveillance[disease] %>% 
-  unname() %>% 
-  purrr::invoke(dplyr::left_join, ., c("USUBJID", "DISEASE_SEQ")) %>%
-  dplyr::select(USUBJID, FLOCKSEQUENCE, WEEK, RESPIRATORY, DIARRHOEA, CNS, MALAISE, LEGLESIONS, SUDDENDEATH)
-```
-
-There are two corrections that cannot be done in CliRes and that we have to do
-here. We also have to break the pipeline because we uses the `raw_symptoms`
-dataframe that we just created at two distinct points in the section that
-follow:
-
-```{r}
-symptoms <- raw_symptoms %>% 
-# correction 1: 2 weeks 8 and no week 9 for cycle 2 of farm 8. These 2 weeks are identical
-  dplyr::filter(USUBJID == "75-008", FLOCKSEQUENCE == "02", WEEK == 8) %>% 
-  dplyr::mutate(WEEK = 8:9) %>%
-  dplyr::bind_rows(dplyr::filter(raw_symptoms, !(USUBJID == "75-008" & FLOCKSEQUENCE == "02" & WEEK == 8))) %>% 
-# correction 2: week 19 instead of 10 for cycle 6 of farm 21:
-  dplyr::mutate(WEEK = ifelse(USUBJID == "75-021" & FLOCKSEQUENCE == "06" & WEEK == 19, 10, WEEK))
-```
-
-## Merging into one single data set
-
-Let's now merge the `symptoms`, `amu` and `chickdata` dataframes that we created
-above. For that, we will use the `symptoms` dataframe as the reference. It means
-that we want to check that
-
-* there is no missing weeks in the `symptoms` dataframe.
-* there is no weeks in `amu` or `chickdata` that are not in `symptoms`
-
-Checking that there is no missing weeks in `symptoms`:
-
-```{r}
-symptoms %>%
-  dplyr::group_by(USUBJID, FLOCKSEQUENCE) %>%
-  dplyr::arrange(WEEK) %>%
-  dplyr::summarise(a = length(unique(diff(WEEK)))) %>%
-  dplyr::ungroup() %>%
-  dplyr::filter(a > 1) %>% 
-  nrow() %>% 
-  `<`(1)
-```
-
-Checking that there is no week defined in `amu` but not in `symptoms`:
-
-```{r}
-dplyr::anti_join(amu, symptoms, c("USUBJID", "FLOCKSEQUENCE", "WEEKNO" = "WEEK")) %>% 
-  nrow() %>% 
-  `<`(1)
-```
-
-Checking that there is no week defined in `chickdata` but not in `viparc`:
-
-```{r}
-dplyr::anti_join(chickdata, symptoms, c("USUBJID", "FLOCKSEQUENCE", "WEEK")) %>% 
-    nrow() %>% 
-  `<`(1)
-```
-
-We are ready for the merging and writing to disk. Note that the `amu` dataframe
-contains only weeks for which there was some AMU. For that reason, we will have
-to perform some `NA` replacement after the merging of `symptoms` and `amu`.
+If you want to transform the data regarding AMU into qualitative information,
+here is the way to do:
 
 ```{r}
 if (!dir.exists("data")) dir.create("data")
-symptoms %>% 
-  dplyr::left_join(amu, c("USUBJID", "FLOCKSEQUENCE", "WEEK" = "WEEKNO")) %>% 
-  dplyr::mutate_at(dplyr::vars(dplyr::matches("^[a-z]", FALSE)), . %>% ifelse(is.na(.), FALSE, .)) %>% 
-  dplyr::mutate_at(dplyr::vars(dplyr::matches("^[A-Z]", FALSE)), . %>% ifelse(is.na(.), 0, .)) %>% 
-  dplyr::left_join(chickdata, c("USUBJID", "FLOCKSEQUENCE", "WEEK")) %>% 
-  dplyr::mutate_at(dplyr::vars(FLOCKSEQUENCE, WEEK), as.integer) %>% 
-  dplyr::arrange(USUBJID, FLOCKSEQUENCE, WEEK) %>% 
-  write.csv("data/viparc.csv", FALSE, row.names = FALSE)
+viparc %>%
+  dplyr::mutate_at(dplyr::vars(dplyr::ends_with("_g")), list(~ . > 0)) %>%
+  dplyr::rename_at(dplyr::vars(dplyr::ends_with("_g")), function(x) sub("_g$", "_use", x)) %>% 
+  write.csv("data/viparc_qualitative.csv", FALSE, row.names = FALSE)
 ```
-
-
-
-
-
-
-
-
 
