@@ -4,6 +4,8 @@
 .Ruserdata
 .dropbox
 figure methods.key
-prophylactic.docx
+*.docx
 .DS_Store
 making datasets.R
+*.xlsx
+rsconnect/*
