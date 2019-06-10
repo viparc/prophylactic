@@ -377,6 +377,13 @@ $(document).ready(function () {
 
 </div>
 
+<div id="TOC">
+<ul>
+<li><a href="#packages">Packages</a></li>
+<li><a href="#loading-the-data">Loading the data</a></li>
+<li><a href="#selecting-the-weeks-we-are-interested-in">Selecting the weeks we are interested in</a></li>
+</ul>
+</div>
 
 <!--
 IMAGES:
@@ -398,6 +405,126 @@ title wherever you want to display the reference list.
   margin-right: auto;
 }
 </style>
+<div id="packages" class="section level2">
+<h2>Packages</h2>
+<p>Installing the required packages:</p>
+<pre class="r"><code>&gt; required &lt;- c(&quot;dplyr&quot;, &quot;magrittr&quot;, &quot;purrr&quot;, &quot;readr&quot;)
+&gt; to_install &lt;- setdiff(required, row.names(installed.packages()))
+&gt; if (length(to_install)) install.packages(to_install)</code></pre>
+<p>Loading <code>magrittr</code>:</p>
+<pre class="r"><code>&gt; library(magrittr)</code></pre>
+</div>
+<div id="loading-the-data" class="section level2">
+<h2>Loading the data</h2>
+<pre class="r"><code>&gt; viparc &lt;- readr::read_csv(&quot;https://raw.githubusercontent.com/viparc/prophylactic/master/data/viparc_qualitative.csv&quot;,
++                           col_types = paste(c(&quot;cii&quot;, rep(&quot;l&quot;, 52), &quot;il&quot;), collapse = &quot;&quot;))</code></pre>
+<p>We have 3 types of variables in this data frame:</p>
+<ul>
+<li>week ID with the variables <code>farm</code>, <code>flock</code> and <code>week</code>;</li>
+<li>presence of clinical signs with the variables <code>respiratory</code>, <code>diarrhoea</code>, <code>cns</code>, <code>malaise</code>, <code>leg_lesions</code> and <code>sudden_death</code>;</li>
+<li>AMU (presence / absence too) with the variables <code>amoxicillin_use</code> to <code>unknown_use</code>.</li>
+</ul>
+</div>
+<div id="selecting-the-weeks-we-are-interested-in" class="section level2">
+<h2>Selecting the weeks we are interested in</h2>
+<p>The week we are interested in are the weeks for which</p>
+<ul>
+<li>there is no clinical sign the current week and <span class="math inline">\(x\)</span> weeks before;</li>
+<li>there is no AMU <span class="math inline">\(y\)</span> weeks before;</li>
+</ul>
+<p>Note here that the first point can apply to any set of clinical signs and that the second point can apply to any set of antimicrobials. Here, we build the function <code>filter_weeks()</code> that performs that filering. This function makes use of the function <code>lagging()</code> defined below and that lags some variables of a data frame that must have at least 3 columns named respectively <code>farm</code>, <code>flock</code> and <code>week</code>:</p>
+<pre class="r"><code>&gt; lagging &lt;- function(df, var, lag) {
++   require(magrittr)                                                              
++   df %&gt;%
++     dplyr::select(!! c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;, var)) %&gt;% 
++     dplyr::mutate(week = week + lag) %&gt;% 
++     dplyr::rename_at(var, paste0, lag)
++ }</code></pre>
+<p>Let’s try it:</p>
+<pre class="r"><code>&gt; lagging(viparc, c(&quot;amoxicillin_use&quot;, &quot;ampicillin_use&quot;), 2) 
+# A tibble: 5,565 x 5
+   farm   flock  week amoxicillin_use2 ampicillin_use2
+   &lt;chr&gt;  &lt;int&gt; &lt;dbl&gt; &lt;lgl&gt;            &lt;lgl&gt;          
+ 1 75-001     1     3 FALSE            FALSE          
+ 2 75-001     1     4 FALSE            FALSE          
+ 3 75-001     1     5 FALSE            FALSE          
+ 4 75-001     1     6 FALSE            FALSE          
+ 5 75-001     1     7 FALSE            FALSE          
+ 6 75-001     1     8 FALSE            FALSE          
+ 7 75-001     1     9 FALSE            FALSE          
+ 8 75-001     1    10 FALSE            FALSE          
+ 9 75-001     1    11 FALSE            FALSE          
+10 75-001     1    12 FALSE            FALSE          
+# … with 5,555 more rows</code></pre>
+<p>Now we can define the <code>filter_weeks()</code> function that uses the above-defined <code>lagging()</code> function:</p>
+<pre class="r"><code>&gt; filter_weeks &lt;- function(df, clinical_signs, antimicrobials, lcs, lam) {
++   require(magrittr)
++   
++   df %&gt;%
++     dplyr::select(c(clinical_signs, antimicrobials)) %&gt;% 
++     is.na() %&gt;% 
++     any() %&gt;% 
++     `!`() %&gt;% 
++     stopifnot()
++   
++   df %&gt;% 
++     names() %&gt;% 
++     grepl(&quot;\\d$&quot;, .) %&gt;% 
++     any() %&gt;% 
++     `!`() %&gt;% 
++     stopifnot()
++   
++   flock_id &lt;- c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;)
++   
++   lcs &lt;- 1:lcs
++   lam &lt;- 1:lam
++   
++   vsel &lt;- unlist(purrr::map2(list(lcs, lam),
++                              list(clinical_signs, antimicrobials),
++                              function(x, y) sapply(c(&quot;&quot;, x), function(z) paste0(y, z))))
++ 
++   purrr::map2(list(lcs, lam),
++               list(clinical_signs, antimicrobials),
++               function(x, y) lapply(x, lagging, df = df, var = y)) %&gt;% 
++     unlist(FALSE) %&gt;% 
++     purrr::reduce(dplyr::left_join, flock_id) %&gt;% 
++     dplyr::left_join(viparc, ., flock_id) %&gt;% 
++     dplyr::mutate_at(dplyr::vars(dplyr::matches(&quot;\\d+$&quot;)), dplyr::coalesce, FALSE) %&gt;% 
++     dplyr::filter_at(dplyr::vars(!! vsel), dplyr::all_vars(. &lt; 1))
++ }</code></pre>
+<p>Note that the above pipeline assumes that</p>
+<ul>
+<li>there is no missing values in the <code>clinical_signs</code> or <code>antimicrobials</code> variables;</li>
+<li>there is no variable names ending with a digit.</li>
+</ul>
+<p>Hence the 2 <code>stopifnot()</code> calls at the beginning of the function. Let’s try it:</p>
+<pre class="r"><code>&gt; filter_weeks(viparc, c(&quot;respiratory&quot;, &quot;diarrhoea&quot;), c(&quot;amoxicillin_use&quot;, &quot;ampicillin_use&quot;), 2, 3)
+# A tibble: 4,183 x 67
+   farm  flock  week respiratory diarrhoea cns   malaise leg_lesions sudden_death amoxicillin_use ampicillin_use apramycin_use
+   &lt;chr&gt; &lt;int&gt; &lt;int&gt; &lt;lgl&gt;       &lt;lgl&gt;     &lt;lgl&gt; &lt;lgl&gt;   &lt;lgl&gt;       &lt;lgl&gt;        &lt;lgl&gt;           &lt;lgl&gt;          &lt;lgl&gt;        
+ 1 75-0…     1     1 FALSE       FALSE     FALSE FALSE   FALSE       TRUE         FALSE           FALSE          FALSE        
+ 2 75-0…     1     2 FALSE       FALSE     FALSE FALSE   FALSE       FALSE        FALSE           FALSE          FALSE        
+ 3 75-0…     1     3 FALSE       FALSE     FALSE FALSE   FALSE       TRUE         FALSE           FALSE          FALSE        
+ 4 75-0…     1     4 FALSE       FALSE     FALSE FALSE   FALSE       FALSE        FALSE           FALSE          FALSE        
+ 5 75-0…     1     5 FALSE       FALSE     FALSE FALSE   FALSE       FALSE        FALSE           FALSE          FALSE        
+ 6 75-0…     1     6 FALSE       FALSE     FALSE FALSE   FALSE       TRUE         FALSE           FALSE          FALSE        
+ 7 75-0…     1     7 FALSE       FALSE     FALSE FALSE   FALSE       FALSE        FALSE           FALSE          FALSE        
+ 8 75-0…     1     8 FALSE       FALSE     FALSE FALSE   FALSE       TRUE         FALSE           FALSE          FALSE        
+ 9 75-0…     1     9 FALSE       FALSE     FALSE FALSE   FALSE       FALSE        FALSE           FALSE          FALSE        
+10 75-0…     1    10 FALSE       FALSE     FALSE FALSE   FALSE       FALSE        FALSE           FALSE          FALSE        
+# … with 4,173 more rows, and 55 more variables: cefadroxil_use &lt;lgl&gt;, cefotaxime_use &lt;lgl&gt;, ceftiofur_use &lt;lgl&gt;, cephalexin_use &lt;lgl&gt;,
+#   chloramphenicol_use &lt;lgl&gt;, ciprofloxacin_use &lt;lgl&gt;, colistin_use &lt;lgl&gt;, doxycycline_use &lt;lgl&gt;, enramycin_use &lt;lgl&gt;,
+#   enrofloxacin_use &lt;lgl&gt;, erythromycin_use &lt;lgl&gt;, florfenicol_use &lt;lgl&gt;, flumequine_use &lt;lgl&gt;, gentamicin_use &lt;lgl&gt;,
+#   josamycin_use &lt;lgl&gt;, kitasamycin_use &lt;lgl&gt;, lincomycin_use &lt;lgl&gt;, marbofloxacin_use &lt;lgl&gt;, methenamine_use &lt;lgl&gt;,
+#   neomycin_use &lt;lgl&gt;, norfloxacin_use &lt;lgl&gt;, oxytetracycline_use &lt;lgl&gt;, spectinomycin_use &lt;lgl&gt;, spiramycin_use &lt;lgl&gt;,
+#   streptomycin_use &lt;lgl&gt;, sulfachloropyridazine_use &lt;lgl&gt;, sulfadiazine_use &lt;lgl&gt;, sulfadimethoxine_use &lt;lgl&gt;,
+#   sulfadimidine_use &lt;lgl&gt;, sulfaguanidin_use &lt;lgl&gt;, sulfamethazine_use &lt;lgl&gt;, sulfamethoxazole_use &lt;lgl&gt;,
+#   sulfamethoxypyridazine_use &lt;lgl&gt;, sulphamethoxazole_use &lt;lgl&gt;, sulphathiazole_use &lt;lgl&gt;, tetracycline_use &lt;lgl&gt;,
+#   thiamphenicol_use &lt;lgl&gt;, tiamulin_use &lt;lgl&gt;, tilmicosin_use &lt;lgl&gt;, trimethoprim_use &lt;lgl&gt;, tylosin_use &lt;lgl&gt;, unknown_use &lt;lgl&gt;,
+#   completed &lt;lgl&gt;, nb_chicken &lt;int&gt;, sampling &lt;lgl&gt;, respiratory1 &lt;lgl&gt;, diarrhoea1 &lt;lgl&gt;, respiratory2 &lt;lgl&gt;, diarrhoea2 &lt;lgl&gt;,
+#   amoxicillin_use1 &lt;lgl&gt;, ampicillin_use1 &lt;lgl&gt;, amoxicillin_use2 &lt;lgl&gt;, ampicillin_use2 &lt;lgl&gt;, amoxicillin_use3 &lt;lgl&gt;,
+#   ampicillin_use3 &lt;lgl&gt;</code></pre>
+</div>
 
 
 

@@ -52,4 +52,116 @@ knitr::opts_chunk$set(margin = TRUE, prompt = TRUE, comment = "",
 options(width = 137)
 ```
 
+## Packages
+
+Installing the required packages:
+
+```{r}
+required <- c("dplyr", "magrittr", "purrr", "readr")
+to_install <- setdiff(required, row.names(installed.packages()))
+if (length(to_install)) install.packages(to_install)
+```
+
+Loading `magrittr`:
+
+```{r}
+library(magrittr)
+```
+
+## Loading the data
+
+```{r}
+viparc <- readr::read_csv("https://raw.githubusercontent.com/viparc/prophylactic/master/data/viparc_qualitative.csv",
+                          col_types = paste(c("cii", rep("l", 52), "il"), collapse = ""))
+```
+
+We have 3 types of variables in this data frame:
+
+* week ID with the variables `farm`, `flock` and `week`;
+* presence of clinical signs with the variables `respiratory`, `diarrhoea`,
+  `cns`, `malaise`, `leg_lesions` and `sudden_death`;
+* AMU (presence / absence too) with the variables `amoxicillin_use` to
+  `unknown_use`.
+
+## Selecting the weeks we are interested in
+
+The week we are interested in are the weeks for which
+
+* there is no clinical sign the current week and $x$ weeks before;
+* there is no AMU $y$ weeks before;
+
+Note here that the first point can apply to any set of clinical signs and that
+the second point can apply to any set of antimicrobials. Here, we build the
+function `filter_weeks()` that performs that filering. This function makes use
+of the function `lagging()` defined below and that lags some variables of a data
+frame that must have at least 3 columns named respectively `farm`, `flock` and
+`week`:
+
+```{r}
+lagging <- function(df, var, lag) {
+  require(magrittr)                                                              
+  df %>%
+    dplyr::select(!! c("farm", "flock", "week", var)) %>% 
+    dplyr::mutate(week = week + lag) %>% 
+    dplyr::rename_at(var, paste0, lag)
+}
+```
+
+Let's try it:
+
+```{r}
+lagging(viparc, c("amoxicillin_use", "ampicillin_use"), 2) 
+```
+
+Now we can define the `filter_weeks()` function that uses the above-defined
+`lagging()` function:
+
+```{r}
+filter_weeks <- function(df, clinical_signs, antimicrobials, lcs, lam) {
+  require(magrittr)
+  
+  df %>%
+    dplyr::select(c(clinical_signs, antimicrobials)) %>% 
+    is.na() %>% 
+    any() %>% 
+    `!`() %>% 
+    stopifnot()
+  
+  df %>% 
+    names() %>% 
+    grepl("\\d$", .) %>% 
+    any() %>% 
+    `!`() %>% 
+    stopifnot()
+  
+  flock_id <- c("farm", "flock", "week")
+  
+  lcs <- 1:lcs
+  lam <- 1:lam
+  
+  vsel <- unlist(purrr::map2(list(lcs, lam),
+                             list(clinical_signs, antimicrobials),
+                             function(x, y) sapply(c("", x), function(z) paste0(y, z))))
+
+  purrr::map2(list(lcs, lam),
+              list(clinical_signs, antimicrobials),
+              function(x, y) lapply(x, lagging, df = df, var = y)) %>% 
+    unlist(FALSE) %>% 
+    purrr::reduce(dplyr::left_join, flock_id) %>% 
+    dplyr::left_join(viparc, ., flock_id) %>% 
+    dplyr::mutate_at(dplyr::vars(dplyr::matches("\\d+$")), dplyr::coalesce, FALSE) %>% 
+    dplyr::filter_at(dplyr::vars(!! vsel), dplyr::all_vars(. < 1))
+}
+```
+
+Note that the above pipeline assumes that
+
+* there is no missing values in the `clinical_signs` or `antimicrobials` variables;
+* there is no variable names ending with a digit.
+
+Hence the 2 `stopifnot()` calls at the beginning of the function. Let's try it:
+
+```{r}
+filter_weeks(viparc, c("respiratory", "diarrhoea"), c("amoxicillin_use", "ampicillin_use"), 2, 3)
+```
 
