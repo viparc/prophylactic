@@ -72,7 +72,7 @@ library(magrittr)
 
 ```{r}
 viparc <- readr::read_csv("https://raw.githubusercontent.com/viparc/prophylactic/master/data/viparc_qualitative.csv",
-                          col_types = paste(c("cii", rep("l", 52), "il"), collapse = ""))
+                          col_types = paste(c("cii", rep("l", 51)), collapse = ""))
 ```
 
 We have 3 types of variables in this data frame:
@@ -83,7 +83,7 @@ We have 3 types of variables in this data frame:
 * AMU (presence / absence too) with the variables `amoxicillin_use` to
   `unknown_use`.
 
-## Selecting the weeks we are interested in
+## Weeks inclusion
 
 The week we are interested in are the weeks for which
 
@@ -110,11 +110,15 @@ lagging <- function(df, var, lag) {
 Let's try it:
 
 ```{r}
-lagging(viparc, c("amoxicillin_use", "ampicillin_use"), 2) 
+lapply(1:2, lagging, df = viparc, var = c("colistin_use", "oxytetracycline_use")) %>% 
+  purrr::reduce(dplyr::full_join, c("farm", "flock", "week")) %>% 
+  dplyr::left_join(viparc, ., c("farm", "flock", "week")) %>% 
+  dplyr::select(farm, flock, week, dplyr::matches("colistin|oxytetracycline")) %>% 
+  head(20)
 ```
 
-Now we can define the `filter_weeks()` function that uses the above-defined
-`lagging()` function:
+It works as expected. Now we can define the `filter_weeks()` function that uses
+the above-defined `lagging()` function:
 
 ```{r}
 filter_weeks <- function(df, clinical_signs, antimicrobials, lcs, lam) {
@@ -139,10 +143,12 @@ filter_weeks <- function(df, clinical_signs, antimicrobials, lcs, lam) {
   lcs <- 1:lcs
   lam <- 1:lam
   
-  vsel <- unlist(purrr::map2(list(lcs, lam),
-                             list(clinical_signs, antimicrobials),
-                             function(x, y) sapply(c("", x), function(z) paste0(y, z))))
-
+  vsel <- purrr::map2(list(lcs, lam),
+                      list(clinical_signs, antimicrobials),
+                      function(x, y) sapply(c("", x), function(z) paste0(y, z))) %>% 
+    unlist() %>% 
+    setdiff(antimicrobials)
+  
   purrr::map2(list(lcs, lam),
               list(clinical_signs, antimicrobials),
               function(x, y) lapply(x, lagging, df = df, var = y)) %>% 
@@ -150,7 +156,8 @@ filter_weeks <- function(df, clinical_signs, antimicrobials, lcs, lam) {
     purrr::reduce(dplyr::left_join, flock_id) %>% 
     dplyr::left_join(viparc, ., flock_id) %>% 
     dplyr::mutate_at(dplyr::vars(dplyr::matches("\\d+$")), dplyr::coalesce, FALSE) %>% 
-    dplyr::filter_at(dplyr::vars(!! vsel), dplyr::all_vars(. < 1))
+    dplyr::mutate(include = dplyr::select(., !! vsel) %>% rowSums() %>% as.logical() %>% `!`()) %>% 
+    dplyr::select(-dplyr::matches("\\d+$"))
 }
 ```
 
@@ -162,6 +169,151 @@ Note that the above pipeline assumes that
 Hence the 2 `stopifnot()` calls at the beginning of the function. Let's try it:
 
 ```{r}
-filter_weeks(viparc, c("respiratory", "diarrhoea"), c("amoxicillin_use", "ampicillin_use"), 2, 3)
+filter_weeks(viparc, c("malaise", "diarrhoea"), c("colistin_use", "oxytetracycline_use"), 2, 2) %>% 
+  dplyr::select(farm, flock, week, colistin_use, oxytetracycline_use, malaise, diarrhoea, include) %>% 
+  head(20)
 ```
 
+Seems to work as expected. Next section puts this weeks selection together with
+the computation of an outcome, by defining the function `prepare_data()`.
+
+## AMU input and clinical sign output
+
+The following function is another use of the `lagging()` function in order to
+generate the outcome variables in terms of clinical signs:
+
+```{r}
+make_output <- function(df, outcome, loc, name = "disease") {
+  loc <- -(1:loc)
+  vsel <- unlist(lapply(outcome, paste0, loc))
+  flock_id <- c("farm", "flock", "week")
+  lapply(loc, lagging, df = df, var = outcome) %>% 
+    purrr::reduce(dplyr::left_join, flock_id) %>% 
+    dplyr::left_join(df, ., flock_id) %>% 
+    dplyr::mutate(!!name := dplyr::select(., dplyr::matches("-\\d+$")) %>% rowSums() %>% as.logical()) %>% 
+    dplyr::select(-dplyr::matches("\\d+$"))
+}
+```
+
+Let's try it:
+
+```{r}
+viparc[356:386, ] %>%
+  make_output(c("malaise", "diarrhoea"), 2) %>% 
+  dplyr::select(farm, flock, week, malaise, diarrhoea, disease) %>% 
+  as.data.frame()
+```
+
+Seems to work as expected. Note the missing values at the end of the flocks too.
+The following function makes the input variable:
+
+```{r}
+make_input <- function(df, antimicrobials) {
+  dplyr::mutate(df, amu = dplyr::select(df, antimicrobials) %>% rowSums() %>% as.logical())
+}
+```
+
+Let's try it:
+
+```{r}
+make_input(viparc, c("colistin_use", "oxytetracycline_use")) %>% 
+  dplyr::select(farm, flock, week, colistin_use, oxytetracycline_use, amu)
+```
+
+Seems to work as expected.
+
+## Optional: covariables
+
+### AMU first week
+
+```{r}
+first_week <- function(df, antimicrobials, wk = 1) {
+  df %>%
+    dplyr::filter(week < wk + 1) %>% 
+    dplyr::mutate(amu_first_week = dplyr::select(., antimicrobials) %>% rowSums() %>% as.logical()) %>% 
+    dplyr::select(farm, flock, amu_first_week) %>% 
+    dplyr::left_join(df, ., c("farm", "flock"))
+}
+```
+
+Let's try it:
+
+```{r}
+viparc %>% 
+  first_week(c("amoxicillin_use", "ampicillin_use")) %>% 
+  dplyr::select(farm, flock, week, amoxicillin_use, ampicillin_use, amu_first_week)
+```
+
+and:
+
+```{r}
+viparc %>% 
+  first_week(c("amoxicillin_use", "ampicillin_use")) %>% 
+  dplyr::select(farm, flock, week, amoxicillin_use, ampicillin_use, amu_first_week) %>% 
+  dplyr::filter(farm == "75-013")
+```
+
+Seems to work as expected.
+
+### AMU after focal week
+
+If one wants to compute a covariable accounting for AMU after the focal week,
+that can be done as:
+
+```{r}
+viparc %>% make_output(c("amoxicillin_use", "ampicillin_use"), 2, "amu_use") %>% 
+  dplyr::select(farm, flock, week, amoxicillin_use, ampicillin_use, amu_use) %>% 
+  head(20)
+```
+
+## Examples of uses
+
+Simple use of a Fisher exact test, without any co-variable:
+
+```{r}
+viparc %>% 
+  filter_weeks(c("malaise", "diarrhoea"), c("colistin_use", "oxytetracycline_use"), 2, 2) %>% 
+  make_input(c("colistin_use", "oxytetracycline_use")) %>% 
+  make_output(c("malaise", "diarrhoea"), 2) %>% 
+  dplyr::filter(include) %>% 
+  dplyr::select(amu, disease) %>% 
+  na.exclude() %T>% print() %$%
+  table(amu, disease) %T>% print() %>% 
+  fisher.test()
+```
+
+A logistic regression can equivalently be used:
+
+```{r}
+viparc %>% 
+  filter_weeks(c("malaise", "diarrhoea"), c("colistin_use", "oxytetracycline_use"), 2, 2) %>% 
+  make_input(c("colistin_use", "oxytetracycline_use")) %>% 
+  make_output(c("malaise", "diarrhoea"), 2) %>% 
+  dplyr::filter(include) %>% 
+  dplyr::select(amu, disease) %>% 
+  na.exclude() %T>% print() %>%
+  glm(disease ~ amu, binomial, .) %>% 
+  summary()
+```
+
+If one wants to consider (and correct for) covariables -- such as age, flock,
+farm, AMU on the first week or AMU after the focal week --, the pipeline would
+look like:
+
+```{r}
+show_summary <- function(x) print(summary(x))
+viparc %>% 
+  filter_weeks(c("malaise", "diarrhoea"), c("colistin_use", "oxytetracycline_use"), 2, 2) %>% 
+  make_input(c("colistin_use", "oxytetracycline_use")) %>% 
+  make_output(c("malaise", "diarrhoea"), 2) %>% 
+  first_week(c("colistin_use", "oxytetracycline_use")) %>% 
+  make_output(c("colistin_use", "oxytetracycline_use"), 2, "amu_use") %>% 
+  dplyr::filter(include) %>% 
+  dplyr::select(farm, flock, week, amu_first_week, amu_use, amu, disease) %>% 
+  na.exclude() %T>% print() %>% 
+  glm(disease ~ amu_first_week + amu_use + week + amu, binomial, .) %T>% show_summary() %>% 
+  anova(test = "LRT")
+```
+
+Here, if one wanted to correct for potential farm and / or flock effect, he'd
+have to consider mixed effect models (we'll explore that latter).
