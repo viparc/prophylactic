@@ -7,6 +7,7 @@
 <meta charset="utf-8" />
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
 
 
 
@@ -342,18 +343,6 @@ summary {
 }
 </style>
 
-<script>
-$(document).ready(function () {
-  window.buildTabsets("TOC");
-});
-
-$(document).ready(function () {
-  $('.tabset-dropdown > .nav-tabs > li').click(function () {
-    $(this).parent().toggleClass('nav-tabs-open')
-  });
-});
-</script>
-
 <!-- code folding -->
 
 
@@ -388,6 +377,10 @@ $(document).ready(function () {
 <li><a href="#amu-after-focal-week">AMU after focal week</a></li>
 </ul></li>
 <li><a href="#examples-of-uses">Examples of uses</a></li>
+<li><a href="#pipelines">Pipelines</a><ul>
+<li><a href="#using-the-fisher-exact-test">Using the Fisher exact test</a></li>
+<li><a href="#using-logistic-regression-with-covariables">Using logistic regression with covariables</a></li>
+</ul></li>
 </ul>
 </div>
 
@@ -414,16 +407,16 @@ title wherever you want to display the reference list.
 <div id="packages" class="section level2">
 <h2>Packages</h2>
 <p>Installing the required packages:</p>
-<pre class="r"><code>&gt; required &lt;- c(&quot;dplyr&quot;, &quot;magrittr&quot;, &quot;purrr&quot;, &quot;readr&quot;)
-&gt; to_install &lt;- setdiff(required, row.names(installed.packages()))
-&gt; if (length(to_install)) install.packages(to_install)</code></pre>
+<pre class="r"><code>required &lt;- c(&quot;dplyr&quot;, &quot;magrittr&quot;, &quot;purrr&quot;, &quot;readr&quot;)
+to_install &lt;- setdiff(required, row.names(installed.packages()))
+if (length(to_install)) install.packages(to_install)</code></pre>
 <p>Loading <code>magrittr</code>:</p>
-<pre class="r"><code>&gt; library(magrittr)</code></pre>
+<pre class="r"><code>library(magrittr)</code></pre>
 </div>
 <div id="loading-the-data" class="section level2">
 <h2>Loading the data</h2>
-<pre class="r"><code>&gt; viparc &lt;- readr::read_csv(&quot;https://raw.githubusercontent.com/viparc/prophylactic/master/data/viparc_qualitative.csv&quot;,
-+                           col_types = paste(c(&quot;cii&quot;, rep(&quot;l&quot;, 51)), collapse = &quot;&quot;))</code></pre>
+<pre class="r"><code>viparc &lt;- readr::read_csv(&quot;https://raw.githubusercontent.com/viparc/prophylactic/master/data/viparc_qualitative.csv&quot;,
+                          col_types = paste(c(&quot;cii&quot;, rep(&quot;l&quot;, 51)), collapse = &quot;&quot;))</code></pre>
 <p>We have 3 types of variables in this data frame:</p>
 <ul>
 <li>week ID with the variables <code>farm</code>, <code>flock</code> and <code>week</code>;</li>
@@ -435,430 +428,700 @@ title wherever you want to display the reference list.
 <h2>Weeks inclusion</h2>
 <p>The week we are interested in are the weeks for which</p>
 <ul>
-<li>there is no clinical sign the current week and <span class="math inline">\(x\)</span> weeks before;</li>
-<li>there is no AMU <span class="math inline">\(y\)</span> weeks before;</li>
+<li>there is no clinical sign the current week <span class="math inline">\(w\)</span> as well as the weeks <span class="math inline">\(w - 1, \dots, w - x\)</span>;</li>
+<li>there is no AMU the current week <span class="math inline">\(w\)</span> as well as the weeks <span class="math inline">\(w - 1, \dots, w - y\)</span>.</li>
 </ul>
-<p>Note here that the first point can apply to any set of clinical signs and that the second point can apply to any set of antimicrobials. Here, we build the function <code>filter_weeks()</code> that performs that filering. This function makes use of the function <code>lagging()</code> defined below and that lags some variables of a data frame that must have at least 3 columns named respectively <code>farm</code>, <code>flock</code> and <code>week</code>:</p>
-<pre class="r"><code>&gt; lagging &lt;- function(df, var, lag) {
-+   require(magrittr)                                                              
-+   df %&gt;%
-+     dplyr::select(!! c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;, var)) %&gt;% 
-+     dplyr::mutate(week = week + lag) %&gt;% 
-+     dplyr::rename_at(var, paste0, lag)
-+ }</code></pre>
+<p>Note here that the first point can apply to any set of clinical signs and that the second point can apply to any set of antimicrobials. Here, we build the function <code>filter_weeks()</code> that performs that filering. This function makes use of the function <code>lagging()</code> defined below and that lags some variables (defined in the <code>var</code> vector) of a data frame <code>df</code> that must have at least 3 columns named respectively <code>farm</code>, <code>flock</code> and <code>week</code>:</p>
+<pre class="r"><code>lagging &lt;- function(df, var, lag) {
+  require(magrittr)                
+  stopifnot(c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;, var) %in% names(df))
+  df %&gt;%
+    dplyr::select(!! c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;, var)) %&gt;% 
+    dplyr::mutate(week = week + lag) %&gt;% 
+    dplyr::rename_at(var, paste0, lag)
+}</code></pre>
 <p>Let’s try it:</p>
-<pre class="r"><code>&gt; lapply(1:2, lagging, df = viparc, var = c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)) %&gt;% 
-+   purrr::reduce(dplyr::full_join, c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;)) %&gt;% 
-+   dplyr::left_join(viparc, ., c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;)) %&gt;% 
-+   dplyr::select(farm, flock, week, dplyr::matches(&quot;colistin|oxytetracycline&quot;)) %&gt;% 
-+   head(20)
-# A tibble: 20 x 9
-   farm   flock  week colistin_use oxytetracycline_use colistin_use1 oxytetracycline_use1 colistin_use2 oxytetracycline_use2
-   &lt;chr&gt;  &lt;int&gt; &lt;int&gt; &lt;lgl&gt;        &lt;lgl&gt;               &lt;lgl&gt;         &lt;lgl&gt;                &lt;lgl&gt;         &lt;lgl&gt;               
- 1 75-001     1     1 TRUE         TRUE                NA            NA                   NA            NA                  
- 2 75-001     1     2 FALSE        FALSE               TRUE          TRUE                 NA            NA                  
- 3 75-001     1     3 FALSE        FALSE               FALSE         FALSE                TRUE          TRUE                
- 4 75-001     1     4 FALSE        FALSE               FALSE         FALSE                FALSE         FALSE               
- 5 75-001     1     5 FALSE        FALSE               FALSE         FALSE                FALSE         FALSE               
- 6 75-001     1     6 FALSE        FALSE               FALSE         FALSE                FALSE         FALSE               
- 7 75-001     1     7 FALSE        FALSE               FALSE         FALSE                FALSE         FALSE               
- 8 75-001     1     8 FALSE        FALSE               FALSE         FALSE                FALSE         FALSE               
- 9 75-001     1     9 FALSE        TRUE                FALSE         FALSE                FALSE         FALSE               
-10 75-001     1    10 FALSE        FALSE               FALSE         TRUE                 FALSE         FALSE               
-11 75-001     1    11 TRUE         FALSE               FALSE         FALSE                FALSE         TRUE                
-12 75-001     1    12 FALSE        FALSE               TRUE          FALSE                FALSE         FALSE               
-13 75-001     1    13 FALSE        FALSE               FALSE         FALSE                TRUE          FALSE               
-14 75-001     1    14 FALSE        FALSE               FALSE         FALSE                FALSE         FALSE               
-15 75-001     1    15 FALSE        FALSE               FALSE         FALSE                FALSE         FALSE               
-16 75-001     1    16 TRUE         FALSE               FALSE         FALSE                FALSE         FALSE               
-17 75-001     1    17 FALSE        FALSE               TRUE          FALSE                FALSE         FALSE               
-18 75-001     1    18 FALSE        FALSE               FALSE         FALSE                TRUE          FALSE               
-19 75-001     1    19 FALSE        FALSE               FALSE         FALSE                FALSE         FALSE               
-20 75-001     1    20 FALSE        FALSE               FALSE         FALSE                FALSE         FALSE               </code></pre>
+<pre class="r"><code>lapply(0:2, lagging, df = viparc, var = c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)) %&gt;% 
+  purrr::reduce(dplyr::full_join, c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;)) %&gt;% 
+  dplyr::left_join(viparc, ., c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;)) %&gt;% 
+  dplyr::select(farm, flock, week, dplyr::matches(&quot;colistin|oxytetracycline&quot;))</code></pre>
+<pre><code>## # A tibble: 5,569 x 11
+##    farm  flock  week colistin_use oxytetracycline… colistin_use0 oxytetracycline… colistin_use1 oxytetracycline… colistin_use2
+##    &lt;chr&gt; &lt;int&gt; &lt;int&gt; &lt;lgl&gt;        &lt;lgl&gt;            &lt;lgl&gt;         &lt;lgl&gt;            &lt;lgl&gt;         &lt;lgl&gt;            &lt;lgl&gt;        
+##  1 75-0…     1     1 TRUE         TRUE             TRUE          TRUE             NA            NA               NA           
+##  2 75-0…     1     2 FALSE        FALSE            FALSE         FALSE            TRUE          TRUE             NA           
+##  3 75-0…     1     3 FALSE        FALSE            FALSE         FALSE            FALSE         FALSE            TRUE         
+##  4 75-0…     1     4 FALSE        FALSE            FALSE         FALSE            FALSE         FALSE            FALSE        
+##  5 75-0…     1     5 FALSE        FALSE            FALSE         FALSE            FALSE         FALSE            FALSE        
+##  6 75-0…     1     6 FALSE        FALSE            FALSE         FALSE            FALSE         FALSE            FALSE        
+##  7 75-0…     1     7 FALSE        FALSE            FALSE         FALSE            FALSE         FALSE            FALSE        
+##  8 75-0…     1     8 FALSE        FALSE            FALSE         FALSE            FALSE         FALSE            FALSE        
+##  9 75-0…     1     9 FALSE        TRUE             FALSE         TRUE             FALSE         FALSE            FALSE        
+## 10 75-0…     1    10 FALSE        FALSE            FALSE         FALSE            FALSE         TRUE             FALSE        
+## # … with 5,559 more rows, and 1 more variable: oxytetracycline_use2 &lt;lgl&gt;</code></pre>
 <p>It works as expected. Now we can define the <code>filter_weeks()</code> function that uses the above-defined <code>lagging()</code> function:</p>
-<pre class="r"><code>&gt; filter_weeks &lt;- function(df, clinical_signs, antimicrobials, lcs, lam) {
-+   require(magrittr)
-+   
-+   df %&gt;%
-+     dplyr::select(c(clinical_signs, antimicrobials)) %&gt;% 
-+     is.na() %&gt;% 
-+     any() %&gt;% 
-+     `!`() %&gt;% 
-+     stopifnot()
-+   
-+   df %&gt;% 
-+     names() %&gt;% 
-+     grepl(&quot;\\d$&quot;, .) %&gt;% 
-+     any() %&gt;% 
-+     `!`() %&gt;% 
-+     stopifnot()
-+   
-+   flock_id &lt;- c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;)
-+   
-+   lcs &lt;- 1:lcs
-+   lam &lt;- 1:lam
-+   
-+   vsel &lt;- purrr::map2(list(lcs, lam),
-+                       list(clinical_signs, antimicrobials),
-+                       function(x, y) sapply(c(&quot;&quot;, x), function(z) paste0(y, z))) %&gt;% 
-+     unlist() %&gt;% 
-+     setdiff(antimicrobials)
-+   
-+   purrr::map2(list(lcs, lam),
-+               list(clinical_signs, antimicrobials),
-+               function(x, y) lapply(x, lagging, df = df, var = y)) %&gt;% 
-+     unlist(FALSE) %&gt;% 
-+     purrr::reduce(dplyr::left_join, flock_id) %&gt;% 
-+     dplyr::left_join(viparc, ., flock_id) %&gt;% 
-+     dplyr::mutate_at(dplyr::vars(dplyr::matches(&quot;\\d+$&quot;)), dplyr::coalesce, FALSE) %&gt;% 
-+     dplyr::mutate(include = dplyr::select(., !! vsel) %&gt;% rowSums() %&gt;% as.logical() %&gt;% `!`()) %&gt;% 
-+     dplyr::select(-dplyr::matches(&quot;\\d+$&quot;))
-+ }</code></pre>
-<p>Note that the above pipeline assumes that</p>
+<pre class="r"><code>filter_weeks &lt;- function(df, clinical_signs, antimicrobials, lcs, lam) {
+  require(magrittr)
+  
+  df %&gt;% # stops if there is any missing values among the clinical signs and AMU variables (this is a requirement from the lagging() function)
+    dplyr::select(c(clinical_signs, antimicrobials)) %&gt;% 
+#    is.na() %&gt;% 
+#    any() %&gt;% 
+    anyNA() %&gt;% 
+    `!`() %&gt;% 
+    stopifnot()
+  
+  df %&gt;% # stops if there is a variable whose name ends with a digit (this is a requirement from the lagging() function)
+    names() %&gt;% 
+    grepl(&quot;\\d$&quot;, .) %&gt;% 
+    any() %&gt;% 
+    `!`() %&gt;% 
+    stopifnot()
+  
+  week_id &lt;- c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;)
+  
+  lcs &lt;- 1:lcs
+  lam &lt;- 1:lam
+
+# vsel below is the vector of variables names we are interested in. It contains
+# the variables from clinical signs with lags 0 to lcs and the variables from 
+# antimicrobials with lags 0n to lam:
+  vsel &lt;- purrr::map2(list(lcs, lam),
+                      list(clinical_signs, antimicrobials),
+                      function(x, y) sapply(c(&quot;&quot;, x), function(z) paste0(y, z))) %&gt;% 
+    unlist() %&gt;% 
+    setdiff(antimicrobials)
+# An example of vsel could be:
+# c(&quot;malaise&quot;, &quot;diarrhoea&quot;, &quot;malaise1&quot;, &quot;diarrhoea1&quot;, &quot;malaise2&quot;, &quot;diarrhoea2&quot;,
+#   &quot;colistin_use1&quot;, &quot;oxytetracycline_use1&quot;, &quot;colistin_use2&quot;, &quot;oxytetracycline_use2&quot;)
+  
+  purrr::map2(list(lcs, lam), # doing the lagging on clinical signs and AMU
+              list(clinical_signs, antimicrobials),
+              function(x, y) lapply(x, lagging, df = df, var = y)) %&gt;%
+# Here we have a list of 2 (first slot for the clinical signs, second slot for
+# the antimicrobials). First slot is a list of lcs data frames and second slots
+# is a list of lam data frames.
+    unlist(FALSE) %&gt;% 
+    purrr::reduce(dplyr::left_join, week_id) %&gt;% # putting together into a single data frames
+    dplyr::left_join(df, ., week_id) %&gt;% # combines with original data frame (so we have the original data frame augmented with lagged CS and AMU variables)
+    dplyr::mutate_at(dplyr::vars(dplyr::matches(&quot;\\d+$&quot;)), dplyr::coalesce, FALSE) %&gt;% # replacing missing values by FALSE in the lagged variables (because we want to get rid off both missing values and FALSE)
+#    dplyr::select(c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;, vsel))
+    dplyr::mutate(include = dplyr::select(., !! vsel) %&gt;% rowSums() %&gt;% as.logical() %&gt;% `!`()) %&gt;% # include only the rows for which there is not missing values in the clinical signs and antimicrobials variables.
+    dplyr::select(-dplyr::matches(&quot;\\d+$&quot;))
+}</code></pre>
+<p>Note that the above pipeline assumes that:</p>
 <ul>
 <li>there is no missing values in the <code>clinical_signs</code> or <code>antimicrobials</code> variables;</li>
 <li>there is no variable names ending with a digit.</li>
 </ul>
+<p>Indeed, this is a requirement of the use of the <code>lagging()</code> function because this function does add some digit at the end of the variables names and also adds some missing values. For that reason, we need to make sure that the original data set does not have these characteristics.</p>
 <p>Hence the 2 <code>stopifnot()</code> calls at the beginning of the function. Let’s try it:</p>
-<pre class="r"><code>&gt; filter_weeks(viparc, c(&quot;malaise&quot;, &quot;diarrhoea&quot;), c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, 2) %&gt;% 
-+   dplyr::select(farm, flock, week, colistin_use, oxytetracycline_use, malaise, diarrhoea, include) %&gt;% 
-+   head(20)
-# A tibble: 20 x 8
-   farm   flock  week colistin_use oxytetracycline_use malaise diarrhoea include
-   &lt;chr&gt;  &lt;int&gt; &lt;int&gt; &lt;lgl&gt;        &lt;lgl&gt;               &lt;lgl&gt;   &lt;lgl&gt;     &lt;lgl&gt;  
- 1 75-001     1     1 TRUE         TRUE                FALSE   FALSE     TRUE   
- 2 75-001     1     2 FALSE        FALSE               FALSE   FALSE     FALSE  
- 3 75-001     1     3 FALSE        FALSE               FALSE   FALSE     FALSE  
- 4 75-001     1     4 FALSE        FALSE               FALSE   FALSE     TRUE   
- 5 75-001     1     5 FALSE        FALSE               FALSE   FALSE     TRUE   
- 6 75-001     1     6 FALSE        FALSE               FALSE   FALSE     TRUE   
- 7 75-001     1     7 FALSE        FALSE               FALSE   FALSE     TRUE   
- 8 75-001     1     8 FALSE        FALSE               FALSE   FALSE     TRUE   
- 9 75-001     1     9 FALSE        TRUE                FALSE   FALSE     TRUE   
-10 75-001     1    10 FALSE        FALSE               FALSE   FALSE     FALSE  
-11 75-001     1    11 TRUE         FALSE               FALSE   FALSE     FALSE  
-12 75-001     1    12 FALSE        FALSE               FALSE   FALSE     FALSE  
-13 75-001     1    13 FALSE        FALSE               FALSE   FALSE     FALSE  
-14 75-001     1    14 FALSE        FALSE               FALSE   FALSE     TRUE   
-15 75-001     1    15 FALSE        FALSE               FALSE   FALSE     TRUE   
-16 75-001     1    16 TRUE         FALSE               FALSE   FALSE     TRUE   
-17 75-001     1    17 FALSE        FALSE               FALSE   FALSE     FALSE  
-18 75-001     1    18 FALSE        FALSE               FALSE   FALSE     FALSE  
-19 75-001     1    19 FALSE        FALSE               FALSE   FALSE     TRUE   
-20 75-001     1    20 FALSE        FALSE               FALSE   FALSE     TRUE   </code></pre>
-<p>Seems to work as expected. Next section puts this weeks selection together with the computation of an outcome, by defining the function <code>prepare_data()</code>.</p>
+<pre class="r"><code>filter_weeks(viparc, c(&quot;malaise&quot;, &quot;diarrhoea&quot;), c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, 2) %&gt;% 
+  dplyr::select(farm, flock, week, colistin_use, oxytetracycline_use, malaise, diarrhoea, include) %&gt;% 
+  head(20)</code></pre>
+<pre><code>## # A tibble: 20 x 8
+##    farm   flock  week colistin_use oxytetracycline_use malaise diarrhoea include
+##    &lt;chr&gt;  &lt;int&gt; &lt;int&gt; &lt;lgl&gt;        &lt;lgl&gt;               &lt;lgl&gt;   &lt;lgl&gt;     &lt;lgl&gt;  
+##  1 75-001     1     1 TRUE         TRUE                FALSE   FALSE     TRUE   
+##  2 75-001     1     2 FALSE        FALSE               FALSE   FALSE     FALSE  
+##  3 75-001     1     3 FALSE        FALSE               FALSE   FALSE     FALSE  
+##  4 75-001     1     4 FALSE        FALSE               FALSE   FALSE     TRUE   
+##  5 75-001     1     5 FALSE        FALSE               FALSE   FALSE     TRUE   
+##  6 75-001     1     6 FALSE        FALSE               FALSE   FALSE     TRUE   
+##  7 75-001     1     7 FALSE        FALSE               FALSE   FALSE     TRUE   
+##  8 75-001     1     8 FALSE        FALSE               FALSE   FALSE     TRUE   
+##  9 75-001     1     9 FALSE        TRUE                FALSE   FALSE     TRUE   
+## 10 75-001     1    10 FALSE        FALSE               FALSE   FALSE     FALSE  
+## 11 75-001     1    11 TRUE         FALSE               FALSE   FALSE     FALSE  
+## 12 75-001     1    12 FALSE        FALSE               FALSE   FALSE     FALSE  
+## 13 75-001     1    13 FALSE        FALSE               FALSE   FALSE     FALSE  
+## 14 75-001     1    14 FALSE        FALSE               FALSE   FALSE     TRUE   
+## 15 75-001     1    15 FALSE        FALSE               FALSE   FALSE     TRUE   
+## 16 75-001     1    16 TRUE         FALSE               FALSE   FALSE     TRUE   
+## 17 75-001     1    17 FALSE        FALSE               FALSE   FALSE     FALSE  
+## 18 75-001     1    18 FALSE        FALSE               FALSE   FALSE     FALSE  
+## 19 75-001     1    19 FALSE        FALSE               FALSE   FALSE     TRUE   
+## 20 75-001     1    20 FALSE        FALSE               FALSE   FALSE     TRUE</code></pre>
+<p>Seems to work as expected. As you can see, <code>filter_weeks()</code> returns the orginal data set augmented with a boolean variable named <code>include</code> specifying, for each week, whether it’s included in the analysis or not. Next section puts this weeks selection together with the computation of an outcome, by defining the function <code>prepare_data()</code>.</p>
 </div>
 <div id="amu-input-and-clinical-sign-output" class="section level2">
 <h2>AMU input and clinical sign output</h2>
 <p>The following function is another use of the <code>lagging()</code> function in order to generate the outcome variables in terms of clinical signs:</p>
-<pre class="r"><code>&gt; make_output &lt;- function(df, outcome, loc, name = &quot;disease&quot;) {
-+   loc &lt;- -(1:loc)
-+   vsel &lt;- unlist(lapply(outcome, paste0, loc))
-+   flock_id &lt;- c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;)
-+   lapply(loc, lagging, df = df, var = outcome) %&gt;% 
-+     purrr::reduce(dplyr::left_join, flock_id) %&gt;% 
-+     dplyr::left_join(df, ., flock_id) %&gt;% 
-+     dplyr::mutate(!!name := dplyr::select(., dplyr::matches(&quot;-\\d+$&quot;)) %&gt;% rowSums() %&gt;% as.logical()) %&gt;% 
-+     dplyr::select(-dplyr::matches(&quot;\\d+$&quot;))
-+ }</code></pre>
+<pre class="r"><code>make_output &lt;- function(df, outcome, loc, name = &quot;disease&quot;) {
+  loc &lt;- -(1:loc)
+  vsel &lt;- unlist(lapply(outcome, paste0, loc))
+# An example of vsel could be:
+# c(&quot;malaise-1&quot;, &quot;malaise-2&quot;, &quot;diarrhoea-1&quot;, &quot;diarrhoea-2&quot;)
+  flock_id &lt;- c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;)
+  lapply(loc, lagging, df = df, var = outcome) %&gt;% # this is a list of loc slots
+    purrr::reduce(dplyr::left_join, flock_id) %&gt;% # puts together into a single data frame
+    dplyr::left_join(df, ., flock_id) %&gt;% # merges with original data frame
+#    dplyr::select(c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;, vsel))
+    dplyr::mutate(!!name := dplyr::select(., dplyr::matches(&quot;-\\d+$&quot;)) %&gt;% rowSums() %&gt;% as.logical()) %&gt;%
+#    dplyr::select(c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;, &quot;disease&quot;))
+    dplyr::select(-dplyr::matches(&quot;\\d+$&quot;))
+}</code></pre>
 <p>Let’s try it:</p>
-<pre class="r"><code>&gt; viparc[356:386, ] %&gt;%
-+   make_output(c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2) %&gt;% 
-+   dplyr::select(farm, flock, week, malaise, diarrhoea, disease) %&gt;% 
-+   as.data.frame()
-     farm flock week malaise diarrhoea disease
-1  75-004     7   13   FALSE     FALSE   FALSE
-2  75-004     7   14   FALSE     FALSE   FALSE
-3  75-004     7   15   FALSE     FALSE   FALSE
-4  75-004     7   16   FALSE     FALSE      NA
-5  75-004     7   17   FALSE     FALSE      NA
-6  75-005     1    1    TRUE      TRUE    TRUE
-7  75-005     1    2    TRUE      TRUE    TRUE
-8  75-005     1    3    TRUE      TRUE   FALSE
-9  75-005     1    4   FALSE     FALSE   FALSE
-10 75-005     1    5   FALSE     FALSE   FALSE
-11 75-005     1    6   FALSE     FALSE   FALSE
-12 75-005     1    7   FALSE     FALSE   FALSE
-13 75-005     1    8   FALSE     FALSE   FALSE
-14 75-005     1    9   FALSE     FALSE    TRUE
-15 75-005     1   10   FALSE     FALSE    TRUE
-16 75-005     1   11   FALSE      TRUE   FALSE
-17 75-005     1   12   FALSE     FALSE   FALSE
-18 75-005     1   13   FALSE     FALSE   FALSE
-19 75-005     1   14   FALSE     FALSE   FALSE
-20 75-005     1   15   FALSE     FALSE   FALSE
-21 75-005     1   16   FALSE     FALSE   FALSE
-22 75-005     1   17   FALSE     FALSE   FALSE
-23 75-005     1   18   FALSE     FALSE      NA
-24 75-005     1   19   FALSE     FALSE      NA
-25 75-005     2    1    TRUE     FALSE    TRUE
-26 75-005     2    2    TRUE     FALSE   FALSE
-27 75-005     2    3   FALSE     FALSE   FALSE
-28 75-005     2    4   FALSE     FALSE   FALSE
-29 75-005     2    5   FALSE     FALSE   FALSE
-30 75-005     2    6   FALSE     FALSE      NA
-31 75-005     2    7   FALSE     FALSE      NA</code></pre>
+<pre class="r"><code>viparc[356:386, ] %&gt;%
+  make_output(c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2) %&gt;% 
+  dplyr::select(farm, flock, week, malaise, diarrhoea, disease) %&gt;% 
+  as.data.frame()</code></pre>
+<pre><code>##      farm flock week malaise diarrhoea disease
+## 1  75-004     7   13   FALSE     FALSE   FALSE
+## 2  75-004     7   14   FALSE     FALSE   FALSE
+## 3  75-004     7   15   FALSE     FALSE   FALSE
+## 4  75-004     7   16   FALSE     FALSE      NA
+## 5  75-004     7   17   FALSE     FALSE      NA
+## 6  75-005     1    1    TRUE      TRUE    TRUE
+## 7  75-005     1    2    TRUE      TRUE    TRUE
+## 8  75-005     1    3    TRUE      TRUE   FALSE
+## 9  75-005     1    4   FALSE     FALSE   FALSE
+## 10 75-005     1    5   FALSE     FALSE   FALSE
+## 11 75-005     1    6   FALSE     FALSE   FALSE
+## 12 75-005     1    7   FALSE     FALSE   FALSE
+## 13 75-005     1    8   FALSE     FALSE   FALSE
+## 14 75-005     1    9   FALSE     FALSE    TRUE
+## 15 75-005     1   10   FALSE     FALSE    TRUE
+## 16 75-005     1   11   FALSE      TRUE   FALSE
+## 17 75-005     1   12   FALSE     FALSE   FALSE
+## 18 75-005     1   13   FALSE     FALSE   FALSE
+## 19 75-005     1   14   FALSE     FALSE   FALSE
+## 20 75-005     1   15   FALSE     FALSE   FALSE
+## 21 75-005     1   16   FALSE     FALSE   FALSE
+## 22 75-005     1   17   FALSE     FALSE   FALSE
+## 23 75-005     1   18   FALSE     FALSE      NA
+## 24 75-005     1   19   FALSE     FALSE      NA
+## 25 75-005     2    1    TRUE     FALSE    TRUE
+## 26 75-005     2    2    TRUE     FALSE   FALSE
+## 27 75-005     2    3   FALSE     FALSE   FALSE
+## 28 75-005     2    4   FALSE     FALSE   FALSE
+## 29 75-005     2    5   FALSE     FALSE   FALSE
+## 30 75-005     2    6   FALSE     FALSE      NA
+## 31 75-005     2    7   FALSE     FALSE      NA</code></pre>
 <p>Seems to work as expected. Note the missing values at the end of the flocks too. The following function makes the input variable:</p>
-<pre class="r"><code>&gt; make_input &lt;- function(df, antimicrobials) {
-+   dplyr::mutate(df, amu = dplyr::select(df, antimicrobials) %&gt;% rowSums() %&gt;% as.logical())
-+ }</code></pre>
+<pre class="r"><code>make_input &lt;- function(df, antimicrobials) {
+  dplyr::mutate(df, amu = dplyr::select(df, antimicrobials) %&gt;% rowSums() %&gt;% as.logical())
+}</code></pre>
 <p>Let’s try it:</p>
-<pre class="r"><code>&gt; make_input(viparc, c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)) %&gt;% 
-+   dplyr::select(farm, flock, week, colistin_use, oxytetracycline_use, amu)
-# A tibble: 5,565 x 6
-   farm   flock  week colistin_use oxytetracycline_use amu  
-   &lt;chr&gt;  &lt;int&gt; &lt;int&gt; &lt;lgl&gt;        &lt;lgl&gt;               &lt;lgl&gt;
- 1 75-001     1     1 TRUE         TRUE                TRUE 
- 2 75-001     1     2 FALSE        FALSE               FALSE
- 3 75-001     1     3 FALSE        FALSE               FALSE
- 4 75-001     1     4 FALSE        FALSE               FALSE
- 5 75-001     1     5 FALSE        FALSE               FALSE
- 6 75-001     1     6 FALSE        FALSE               FALSE
- 7 75-001     1     7 FALSE        FALSE               FALSE
- 8 75-001     1     8 FALSE        FALSE               FALSE
- 9 75-001     1     9 FALSE        TRUE                TRUE 
-10 75-001     1    10 FALSE        FALSE               FALSE
-# … with 5,555 more rows</code></pre>
+<pre class="r"><code>make_input(viparc, c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)) %&gt;% 
+  dplyr::select(farm, flock, week, colistin_use, oxytetracycline_use, amu)</code></pre>
+<pre><code>## # A tibble: 5,565 x 6
+##    farm   flock  week colistin_use oxytetracycline_use amu  
+##    &lt;chr&gt;  &lt;int&gt; &lt;int&gt; &lt;lgl&gt;        &lt;lgl&gt;               &lt;lgl&gt;
+##  1 75-001     1     1 TRUE         TRUE                TRUE 
+##  2 75-001     1     2 FALSE        FALSE               FALSE
+##  3 75-001     1     3 FALSE        FALSE               FALSE
+##  4 75-001     1     4 FALSE        FALSE               FALSE
+##  5 75-001     1     5 FALSE        FALSE               FALSE
+##  6 75-001     1     6 FALSE        FALSE               FALSE
+##  7 75-001     1     7 FALSE        FALSE               FALSE
+##  8 75-001     1     8 FALSE        FALSE               FALSE
+##  9 75-001     1     9 FALSE        TRUE                TRUE 
+## 10 75-001     1    10 FALSE        FALSE               FALSE
+## # … with 5,555 more rows</code></pre>
 <p>Seems to work as expected.</p>
 </div>
 <div id="optional-covariables" class="section level2">
 <h2>Optional: covariables</h2>
 <div id="amu-first-week" class="section level3">
 <h3>AMU first week</h3>
-<pre class="r"><code>&gt; first_week &lt;- function(df, antimicrobials, wk = 1) {
-+   df %&gt;%
-+     dplyr::filter(week &lt; wk + 1) %&gt;% 
-+     dplyr::mutate(amu_first_week = dplyr::select(., antimicrobials) %&gt;% rowSums() %&gt;% as.logical()) %&gt;% 
-+     dplyr::select(farm, flock, amu_first_week) %&gt;% 
-+     dplyr::left_join(df, ., c(&quot;farm&quot;, &quot;flock&quot;))
-+ }</code></pre>
+<p>The following function augmentes the data frame <code>df</code> with a boolean variable that specify whether any of the antimicrobials defined in the <code>antimicrobials</code> vector has been used during the first <code>wk</code> weeks:</p>
+<pre class="r"><code>first_week &lt;- function(df, antimicrobials, wk = 1) {
+  df %&gt;%
+    dplyr::filter(week &lt; wk + 1) %&gt;% # filters first weeks
+    dplyr::mutate(amu_first_week = dplyr::select(., antimicrobials) %&gt;% rowSums() %&gt;% as.logical()) %&gt;% 
+    dplyr::select(farm, flock, amu_first_week) %&gt;% 
+    dplyr::left_join(df, ., c(&quot;farm&quot;, &quot;flock&quot;))
+}</code></pre>
 <p>Let’s try it:</p>
-<pre class="r"><code>&gt; viparc %&gt;% 
-+   first_week(c(&quot;amoxicillin_use&quot;, &quot;ampicillin_use&quot;)) %&gt;% 
-+   dplyr::select(farm, flock, week, amoxicillin_use, ampicillin_use, amu_first_week)
-# A tibble: 5,565 x 6
-   farm   flock  week amoxicillin_use ampicillin_use amu_first_week
-   &lt;chr&gt;  &lt;int&gt; &lt;int&gt; &lt;lgl&gt;           &lt;lgl&gt;          &lt;lgl&gt;         
- 1 75-001     1     1 FALSE           FALSE          FALSE         
- 2 75-001     1     2 FALSE           FALSE          FALSE         
- 3 75-001     1     3 FALSE           FALSE          FALSE         
- 4 75-001     1     4 FALSE           FALSE          FALSE         
- 5 75-001     1     5 FALSE           FALSE          FALSE         
- 6 75-001     1     6 FALSE           FALSE          FALSE         
- 7 75-001     1     7 FALSE           FALSE          FALSE         
- 8 75-001     1     8 FALSE           FALSE          FALSE         
- 9 75-001     1     9 FALSE           FALSE          FALSE         
-10 75-001     1    10 FALSE           FALSE          FALSE         
-# … with 5,555 more rows</code></pre>
-<p>and:</p>
-<pre class="r"><code>&gt; viparc %&gt;% 
-+   first_week(c(&quot;amoxicillin_use&quot;, &quot;ampicillin_use&quot;)) %&gt;% 
-+   dplyr::select(farm, flock, week, amoxicillin_use, ampicillin_use, amu_first_week) %&gt;% 
-+   dplyr::filter(farm == &quot;75-013&quot;)
-# A tibble: 54 x 6
-   farm   flock  week amoxicillin_use ampicillin_use amu_first_week
-   &lt;chr&gt;  &lt;int&gt; &lt;int&gt; &lt;lgl&gt;           &lt;lgl&gt;          &lt;lgl&gt;         
- 1 75-013     1     1 TRUE            FALSE          TRUE          
- 2 75-013     1     2 FALSE           FALSE          TRUE          
- 3 75-013     1     3 FALSE           FALSE          TRUE          
- 4 75-013     1     4 FALSE           FALSE          TRUE          
- 5 75-013     1     5 FALSE           FALSE          TRUE          
- 6 75-013     1     6 FALSE           FALSE          TRUE          
- 7 75-013     1     7 FALSE           FALSE          TRUE          
- 8 75-013     1     8 FALSE           FALSE          TRUE          
- 9 75-013     1     9 FALSE           FALSE          TRUE          
-10 75-013     1    10 TRUE            FALSE          TRUE          
-# … with 44 more rows</code></pre>
+<pre class="r"><code>viparc %&gt;% 
+  first_week(c(&quot;amoxicillin_use&quot;, &quot;ampicillin_use&quot;)) %&gt;% 
+  dplyr::select(farm, flock, week, amoxicillin_use, ampicillin_use, amu_first_week)</code></pre>
+<pre><code>## # A tibble: 5,565 x 6
+##    farm   flock  week amoxicillin_use ampicillin_use amu_first_week
+##    &lt;chr&gt;  &lt;int&gt; &lt;int&gt; &lt;lgl&gt;           &lt;lgl&gt;          &lt;lgl&gt;         
+##  1 75-001     1     1 FALSE           FALSE          FALSE         
+##  2 75-001     1     2 FALSE           FALSE          FALSE         
+##  3 75-001     1     3 FALSE           FALSE          FALSE         
+##  4 75-001     1     4 FALSE           FALSE          FALSE         
+##  5 75-001     1     5 FALSE           FALSE          FALSE         
+##  6 75-001     1     6 FALSE           FALSE          FALSE         
+##  7 75-001     1     7 FALSE           FALSE          FALSE         
+##  8 75-001     1     8 FALSE           FALSE          FALSE         
+##  9 75-001     1     9 FALSE           FALSE          FALSE         
+## 10 75-001     1    10 FALSE           FALSE          FALSE         
+## # … with 5,555 more rows</code></pre>
+<p>Looking at another cycle from another farm:</p>
+<pre class="r"><code>viparc %&gt;% 
+  first_week(c(&quot;amoxicillin_use&quot;, &quot;ampicillin_use&quot;)) %&gt;% 
+  dplyr::select(farm, flock, week, amoxicillin_use, ampicillin_use, amu_first_week) %&gt;% 
+  dplyr::filter(farm == &quot;75-013&quot;)</code></pre>
+<pre><code>## # A tibble: 54 x 6
+##    farm   flock  week amoxicillin_use ampicillin_use amu_first_week
+##    &lt;chr&gt;  &lt;int&gt; &lt;int&gt; &lt;lgl&gt;           &lt;lgl&gt;          &lt;lgl&gt;         
+##  1 75-013     1     1 TRUE            FALSE          TRUE          
+##  2 75-013     1     2 FALSE           FALSE          TRUE          
+##  3 75-013     1     3 FALSE           FALSE          TRUE          
+##  4 75-013     1     4 FALSE           FALSE          TRUE          
+##  5 75-013     1     5 FALSE           FALSE          TRUE          
+##  6 75-013     1     6 FALSE           FALSE          TRUE          
+##  7 75-013     1     7 FALSE           FALSE          TRUE          
+##  8 75-013     1     8 FALSE           FALSE          TRUE          
+##  9 75-013     1     9 FALSE           FALSE          TRUE          
+## 10 75-013     1    10 TRUE            FALSE          TRUE          
+## # … with 44 more rows</code></pre>
 <p>Seems to work as expected.</p>
 </div>
 <div id="amu-after-focal-week" class="section level3">
 <h3>AMU after focal week</h3>
-<p>If one wants to compute a covariable accounting for AMU after the focal week, that can be done as:</p>
-<pre class="r"><code>&gt; viparc %&gt;% make_output(c(&quot;amoxicillin_use&quot;, &quot;ampicillin_use&quot;), 2, &quot;amu_use&quot;) %&gt;% 
-+   dplyr::select(farm, flock, week, amoxicillin_use, ampicillin_use, amu_use) %&gt;% 
-+   head(20)
-# A tibble: 20 x 6
-   farm   flock  week amoxicillin_use ampicillin_use amu_use
-   &lt;chr&gt;  &lt;int&gt; &lt;int&gt; &lt;lgl&gt;           &lt;lgl&gt;          &lt;lgl&gt;  
- 1 75-001     1     1 FALSE           FALSE          FALSE  
- 2 75-001     1     2 FALSE           FALSE          FALSE  
- 3 75-001     1     3 FALSE           FALSE          FALSE  
- 4 75-001     1     4 FALSE           FALSE          FALSE  
- 5 75-001     1     5 FALSE           FALSE          FALSE  
- 6 75-001     1     6 FALSE           FALSE          FALSE  
- 7 75-001     1     7 FALSE           FALSE          FALSE  
- 8 75-001     1     8 FALSE           FALSE          FALSE  
- 9 75-001     1     9 FALSE           FALSE          TRUE   
-10 75-001     1    10 FALSE           FALSE          TRUE   
-11 75-001     1    11 FALSE           TRUE           FALSE  
-12 75-001     1    12 FALSE           FALSE          FALSE  
-13 75-001     1    13 FALSE           FALSE          FALSE  
-14 75-001     1    14 FALSE           FALSE          FALSE  
-15 75-001     1    15 FALSE           FALSE          FALSE  
-16 75-001     1    16 FALSE           FALSE          FALSE  
-17 75-001     1    17 FALSE           FALSE          FALSE  
-18 75-001     1    18 FALSE           FALSE          FALSE  
-19 75-001     1    19 FALSE           FALSE          FALSE  
-20 75-001     1    20 FALSE           FALSE          FALSE  </code></pre>
+<p>If one wants to compute a covariable accounting for AMU after the focal week, that can simply be done by reusing the <code>make_output()</code> function defined above:</p>
+<pre class="r"><code>viparc %&gt;% make_output(c(&quot;amoxicillin_use&quot;, &quot;ampicillin_use&quot;), 2, &quot;amu_use&quot;) %&gt;% 
+  dplyr::select(farm, flock, week, amoxicillin_use, ampicillin_use, amu_use) %&gt;% 
+  head(20)</code></pre>
+<pre><code>## # A tibble: 20 x 6
+##    farm   flock  week amoxicillin_use ampicillin_use amu_use
+##    &lt;chr&gt;  &lt;int&gt; &lt;int&gt; &lt;lgl&gt;           &lt;lgl&gt;          &lt;lgl&gt;  
+##  1 75-001     1     1 FALSE           FALSE          FALSE  
+##  2 75-001     1     2 FALSE           FALSE          FALSE  
+##  3 75-001     1     3 FALSE           FALSE          FALSE  
+##  4 75-001     1     4 FALSE           FALSE          FALSE  
+##  5 75-001     1     5 FALSE           FALSE          FALSE  
+##  6 75-001     1     6 FALSE           FALSE          FALSE  
+##  7 75-001     1     7 FALSE           FALSE          FALSE  
+##  8 75-001     1     8 FALSE           FALSE          FALSE  
+##  9 75-001     1     9 FALSE           FALSE          TRUE   
+## 10 75-001     1    10 FALSE           FALSE          TRUE   
+## 11 75-001     1    11 FALSE           TRUE           FALSE  
+## 12 75-001     1    12 FALSE           FALSE          FALSE  
+## 13 75-001     1    13 FALSE           FALSE          FALSE  
+## 14 75-001     1    14 FALSE           FALSE          FALSE  
+## 15 75-001     1    15 FALSE           FALSE          FALSE  
+## 16 75-001     1    16 FALSE           FALSE          FALSE  
+## 17 75-001     1    17 FALSE           FALSE          FALSE  
+## 18 75-001     1    18 FALSE           FALSE          FALSE  
+## 19 75-001     1    19 FALSE           FALSE          FALSE  
+## 20 75-001     1    20 FALSE           FALSE          FALSE</code></pre>
 </div>
 </div>
 <div id="examples-of-uses" class="section level2">
 <h2>Examples of uses</h2>
 <p>Simple use of a Fisher exact test, without any co-variable:</p>
-<pre class="r"><code>&gt; viparc %&gt;% 
-+   filter_weeks(c(&quot;malaise&quot;, &quot;diarrhoea&quot;), c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, 2) %&gt;% 
-+   make_input(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)) %&gt;% 
-+   make_output(c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2) %&gt;% 
-+   dplyr::filter(include) %&gt;% 
-+   dplyr::select(amu, disease) %&gt;% 
-+   na.exclude() %T&gt;% print() %$%
-+   table(amu, disease) %T&gt;% print() %&gt;% 
-+   fisher.test()
-# A tibble: 2,468 x 2
-   amu   disease
-   &lt;lgl&gt; &lt;lgl&gt;  
- 1 TRUE  FALSE  
- 2 FALSE FALSE  
- 3 FALSE FALSE  
- 4 FALSE FALSE  
- 5 FALSE FALSE  
- 6 FALSE FALSE  
- 7 TRUE  FALSE  
- 8 FALSE FALSE  
- 9 FALSE FALSE  
-10 TRUE  FALSE  
-# … with 2,458 more rows
-       disease
-amu     FALSE TRUE
-  FALSE  1989  276
-  TRUE    149   54
-
-    Fisher&#39;s Exact Test for Count Data
-
-data:  .
-p-value = 1.292e-07
-alternative hypothesis: true odds ratio is not equal to 1
-95 percent confidence interval:
- 1.828782 3.685931
-sample estimates:
-odds ratio 
-  2.610425 </code></pre>
+<pre class="r"><code>viparc %&gt;% 
+  filter_weeks(c(&quot;malaise&quot;, &quot;diarrhoea&quot;), c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, 2) %&gt;% 
+  make_input(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)) %&gt;% 
+  make_output(c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2) %&gt;% 
+  dplyr::filter(include) %&gt;% 
+  dplyr::select(amu, disease) %&gt;% 
+  na.exclude() %T&gt;% print() %$%
+  table(amu, disease) %T&gt;% print() %&gt;% 
+  fisher.test()</code></pre>
+<pre><code>## # A tibble: 2,468 x 2
+##    amu   disease
+##    &lt;lgl&gt; &lt;lgl&gt;  
+##  1 TRUE  FALSE  
+##  2 FALSE FALSE  
+##  3 FALSE FALSE  
+##  4 FALSE FALSE  
+##  5 FALSE FALSE  
+##  6 FALSE FALSE  
+##  7 TRUE  FALSE  
+##  8 FALSE FALSE  
+##  9 FALSE FALSE  
+## 10 TRUE  FALSE  
+## # … with 2,458 more rows
+##        disease
+## amu     FALSE TRUE
+##   FALSE  1989  276
+##   TRUE    149   54</code></pre>
+<pre><code>## 
+##  Fisher&#39;s Exact Test for Count Data
+## 
+## data:  .
+## p-value = 1.292e-07
+## alternative hypothesis: true odds ratio is not equal to 1
+## 95 percent confidence interval:
+##  1.828782 3.685931
+## sample estimates:
+## odds ratio 
+##   2.610425</code></pre>
 <p>A logistic regression can equivalently be used:</p>
-<pre class="r"><code>&gt; viparc %&gt;% 
-+   filter_weeks(c(&quot;malaise&quot;, &quot;diarrhoea&quot;), c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, 2) %&gt;% 
-+   make_input(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)) %&gt;% 
-+   make_output(c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2) %&gt;% 
-+   dplyr::filter(include) %&gt;% 
-+   dplyr::select(amu, disease) %&gt;% 
-+   na.exclude() %T&gt;% print() %&gt;%
-+   glm(disease ~ amu, binomial, .) %&gt;% 
-+   summary()
-# A tibble: 2,468 x 2
-   amu   disease
-   &lt;lgl&gt; &lt;lgl&gt;  
- 1 TRUE  FALSE  
- 2 FALSE FALSE  
- 3 FALSE FALSE  
- 4 FALSE FALSE  
- 5 FALSE FALSE  
- 6 FALSE FALSE  
- 7 TRUE  FALSE  
- 8 FALSE FALSE  
- 9 FALSE FALSE  
-10 TRUE  FALSE  
-# … with 2,458 more rows
-
-Call:
-glm(formula = disease ~ amu, family = binomial, data = .)
-
-Deviance Residuals: 
-    Min       1Q   Median       3Q      Max  
--0.7865  -0.5098  -0.5098  -0.5098   2.0518  
-
-Coefficients:
-            Estimate Std. Error z value Pr(&gt;|z|)    
-(Intercept) -1.97499    0.06423 -30.747  &lt; 2e-16 ***
-amuTRUE      0.96002    0.17134   5.603  2.1e-08 ***
----
-Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
-
-(Dispersion parameter for binomial family taken to be 1)
-
-    Null deviance: 1941.7  on 2467  degrees of freedom
-Residual deviance: 1914.0  on 2466  degrees of freedom
-AIC: 1918
-
-Number of Fisher Scoring iterations: 4</code></pre>
-<p>If one wants to consider (and correct for) covariables – such as age, flock, farm, AMU on the first week or AMU after the focal week –, the pipeline would look like:</p>
-<pre class="r"><code>&gt; show_summary &lt;- function(x) print(summary(x))
-&gt; viparc %&gt;% 
-+   filter_weeks(c(&quot;malaise&quot;, &quot;diarrhoea&quot;), c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, 2) %&gt;% 
-+   make_input(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)) %&gt;% 
-+   make_output(c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2) %&gt;% 
-+   first_week(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)) %&gt;% 
-+   make_output(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, &quot;amu_use&quot;) %&gt;% 
-+   dplyr::filter(include) %&gt;% 
-+   dplyr::select(farm, flock, week, amu_first_week, amu_use, amu, disease) %&gt;% 
-+   na.exclude() %T&gt;% print() %&gt;% 
-+   glm(disease ~ amu_first_week + amu_use + week + amu, binomial, .) %T&gt;% show_summary() %&gt;% 
-+   anova(test = &quot;LRT&quot;)
-# A tibble: 9,146 x 7
-   farm   flock  week amu_first_week amu_use amu   disease
-   &lt;chr&gt;  &lt;int&gt; &lt;int&gt; &lt;lgl&gt;          &lt;lgl&gt;   &lt;lgl&gt; &lt;lgl&gt;  
- 1 75-001     1     1 TRUE           FALSE   TRUE  FALSE  
- 2 75-001     1     4 TRUE           FALSE   FALSE FALSE  
- 3 75-001     1     5 TRUE           FALSE   FALSE FALSE  
- 4 75-001     1     6 TRUE           FALSE   FALSE FALSE  
- 5 75-001     1     7 TRUE           TRUE    FALSE FALSE  
- 6 75-001     1     8 TRUE           TRUE    FALSE FALSE  
- 7 75-001     1     9 TRUE           TRUE    TRUE  FALSE  
- 8 75-001     1    14 TRUE           TRUE    FALSE FALSE  
- 9 75-001     1    15 TRUE           TRUE    FALSE FALSE  
-10 75-001     1    16 TRUE           FALSE   TRUE  FALSE  
-# … with 9,136 more rows
-
-Call:
-glm(formula = disease ~ amu_first_week + amu_use + week + amu, 
-    family = binomial, data = .)
-
-Deviance Residuals: 
-    Min       1Q   Median       3Q      Max  
--2.0227  -0.1912  -0.1912  -0.1760   3.4666  
-
-Coefficients:
-                   Estimate Std. Error z value Pr(&gt;|z|)    
-(Intercept)        -0.34487    0.17122  -2.014    0.044 *  
-amu_first_weekTRUE -2.13778    0.13500 -15.836  &lt; 2e-16 ***
-amu_useTRUE         1.46714    0.21011   6.983  2.9e-12 ***
-week               -0.16778    0.01868  -8.980  &lt; 2e-16 ***
-amuTRUE             1.12042    0.23573   4.753  2.0e-06 ***
----
-Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
-
-(Dispersion parameter for binomial family taken to be 1)
-
-    Null deviance: 2840.5  on 9145  degrees of freedom
-Residual deviance: 2215.9  on 9141  degrees of freedom
-AIC: 2225.9
-
-Number of Fisher Scoring iterations: 6
-Analysis of Deviance Table
-
-Model: binomial, link: logit
-
-Response: disease
-
-Terms added sequentially (first to last)
-
-               Df Deviance Resid. Df Resid. Dev  Pr(&gt;Chi)    
-NULL                            9145     2840.4              
-amu_first_week  1  300.246      9144     2540.2 &lt; 2.2e-16 ***
-amu_use         1  160.043      9143     2380.2 &lt; 2.2e-16 ***
-week            1  143.259      9142     2236.9 &lt; 2.2e-16 ***
-amu             1   20.991      9141     2215.9 4.615e-06 ***
----
-Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
+<pre class="r"><code>viparc %&gt;% 
+  filter_weeks(c(&quot;malaise&quot;, &quot;diarrhoea&quot;), c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, 2) %&gt;% 
+  make_input(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)) %&gt;% 
+  make_output(c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2) %&gt;% 
+  dplyr::filter(include) %&gt;% 
+  dplyr::select(amu, disease) %&gt;% 
+  na.exclude() %T&gt;% print() %&gt;%
+  glm(disease ~ amu, binomial, .) %&gt;% 
+  summary()</code></pre>
+<pre><code>## # A tibble: 2,468 x 2
+##    amu   disease
+##    &lt;lgl&gt; &lt;lgl&gt;  
+##  1 TRUE  FALSE  
+##  2 FALSE FALSE  
+##  3 FALSE FALSE  
+##  4 FALSE FALSE  
+##  5 FALSE FALSE  
+##  6 FALSE FALSE  
+##  7 TRUE  FALSE  
+##  8 FALSE FALSE  
+##  9 FALSE FALSE  
+## 10 TRUE  FALSE  
+## # … with 2,458 more rows</code></pre>
+<pre><code>## 
+## Call:
+## glm(formula = disease ~ amu, family = binomial, data = .)
+## 
+## Deviance Residuals: 
+##     Min       1Q   Median       3Q      Max  
+## -0.7865  -0.5098  -0.5098  -0.5098   2.0518  
+## 
+## Coefficients:
+##             Estimate Std. Error z value Pr(&gt;|z|)    
+## (Intercept) -1.97499    0.06423 -30.747  &lt; 2e-16 ***
+## amuTRUE      0.96002    0.17134   5.603  2.1e-08 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## (Dispersion parameter for binomial family taken to be 1)
+## 
+##     Null deviance: 1941.7  on 2467  degrees of freedom
+## Residual deviance: 1914.0  on 2466  degrees of freedom
+## AIC: 1918
+## 
+## Number of Fisher Scoring iterations: 4</code></pre>
+<p>If one wants to consider (and correct for) covariables – such as age, flock, farm, AMU on the first week or AMU after the focal week (age of the birds) –, the pipeline would look as below:</p>
+<pre class="r"><code>show_summary &lt;- function(x) print(summary(x))
+viparc %&gt;% 
+  filter_weeks(c(&quot;malaise&quot;, &quot;diarrhoea&quot;), c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, 2) %&gt;% 
+  make_input(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)) %&gt;% 
+  make_output(c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2) %&gt;% 
+  first_week(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)) %&gt;% 
+  make_output(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, &quot;amu_use&quot;) %&gt;% 
+  dplyr::filter(include) %&gt;% 
+  dplyr::select(farm, flock, week, amu_first_week, amu_use, amu, disease) %&gt;% 
+  na.exclude() %T&gt;% print() %&gt;% 
+  glm(disease ~ amu_first_week + amu_use + week + amu, binomial, .) %T&gt;% show_summary() %&gt;% 
+  anova(test = &quot;LRT&quot;)</code></pre>
+<pre><code>## # A tibble: 9,146 x 7
+##    farm   flock  week amu_first_week amu_use amu   disease
+##    &lt;chr&gt;  &lt;int&gt; &lt;int&gt; &lt;lgl&gt;          &lt;lgl&gt;   &lt;lgl&gt; &lt;lgl&gt;  
+##  1 75-001     1     1 TRUE           FALSE   TRUE  FALSE  
+##  2 75-001     1     4 TRUE           FALSE   FALSE FALSE  
+##  3 75-001     1     5 TRUE           FALSE   FALSE FALSE  
+##  4 75-001     1     6 TRUE           FALSE   FALSE FALSE  
+##  5 75-001     1     7 TRUE           TRUE    FALSE FALSE  
+##  6 75-001     1     8 TRUE           TRUE    FALSE FALSE  
+##  7 75-001     1     9 TRUE           TRUE    TRUE  FALSE  
+##  8 75-001     1    14 TRUE           TRUE    FALSE FALSE  
+##  9 75-001     1    15 TRUE           TRUE    FALSE FALSE  
+## 10 75-001     1    16 TRUE           FALSE   TRUE  FALSE  
+## # … with 9,136 more rows
+## 
+## Call:
+## glm(formula = disease ~ amu_first_week + amu_use + week + amu, 
+##     family = binomial, data = .)
+## 
+## Deviance Residuals: 
+##     Min       1Q   Median       3Q      Max  
+## -2.0227  -0.1912  -0.1912  -0.1760   3.4666  
+## 
+## Coefficients:
+##                    Estimate Std. Error z value Pr(&gt;|z|)    
+## (Intercept)        -0.34487    0.17122  -2.014    0.044 *  
+## amu_first_weekTRUE -2.13778    0.13500 -15.836  &lt; 2e-16 ***
+## amu_useTRUE         1.46714    0.21011   6.983  2.9e-12 ***
+## week               -0.16778    0.01868  -8.980  &lt; 2e-16 ***
+## amuTRUE             1.12042    0.23573   4.753  2.0e-06 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## (Dispersion parameter for binomial family taken to be 1)
+## 
+##     Null deviance: 2840.5  on 9145  degrees of freedom
+## Residual deviance: 2215.9  on 9141  degrees of freedom
+## AIC: 2225.9
+## 
+## Number of Fisher Scoring iterations: 6</code></pre>
+<pre><code>## Analysis of Deviance Table
+## 
+## Model: binomial, link: logit
+## 
+## Response: disease
+## 
+## Terms added sequentially (first to last)
+## 
+## 
+##                Df Deviance Resid. Df Resid. Dev  Pr(&gt;Chi)    
+## NULL                            9145     2840.4              
+## amu_first_week  1  300.246      9144     2540.2 &lt; 2.2e-16 ***
+## amu_use         1  160.043      9143     2380.2 &lt; 2.2e-16 ***
+## week            1  143.259      9142     2236.9 &lt; 2.2e-16 ***
+## amu             1   20.991      9141     2215.9 4.615e-06 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
 <p>Here, if one wanted to correct for potential farm and / or flock effect, he’d have to consider mixed effect models (we’ll explore that latter).</p>
+</div>
+<div id="pipelines" class="section level2">
+<h2>Pipelines</h2>
+<div id="using-the-fisher-exact-test" class="section level3">
+<h3>Using the Fisher exact test</h3>
+<p>Let’s redefine a Fisher exact test function that returns the results of the test together with the input contingency table:</p>
+<pre class="r"><code>fisher_test &lt;- function(x, ...) {
+  list(x, fisher.test(x, ...))
+}</code></pre>
+<p>Let’s define a first pipeline using this new function:</p>
+<pre class="r"><code>pipeline1 &lt;- function(df, clinical_signs_filtering = NULL, antimicrobials_filtering = NULL, lcs,
+                      lam, antimicrobials_input = NULL, clinical_signs_output = NULL, watching, ...) {
+  require(magrittr)
+  var_names &lt;- setdiff(names(df), c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;))
+  cs_names &lt;- grep(&quot;_use$&quot;, var_names, value = TRUE, invert = TRUE)
+  am_names &lt;- grep(&quot;_use$&quot;, var_names, value = TRUE)
+  if (is.null(clinical_signs_filtering)) clinical_signs_filtering &lt;- cs_names
+  if (is.null(clinical_signs_output)) clinical_signs_output &lt;- cs_names
+  if (is.null(antimicrobials_filtering)) antimicrobials_filtering &lt;- am_names
+  if (is.null(antimicrobials_input)) antimicrobials_input &lt;- am_names
+  df %&gt;% 
+    filter_weeks(clinical_signs_filtering, antimicrobials_filtering, lcs, lam) %&gt;% # creates include variable
+    make_input(antimicrobials_input) %&gt;% # creates amu variable
+    make_output(clinical_signs_output, watching, &quot;disease&quot;) %&gt;% # creates disease variable
+    dplyr::filter(include) %&gt;% # filtering
+    dplyr::select(amu, disease) %&gt;% 
+    na.exclude() %$%
+    table(amu, disease) %&gt;% 
+    fisher_test(., ...)
+}</code></pre>
+<p>Let’s try it:</p>
+<pre class="r"><code>pipeline1(viparc,
+# 1. FILTERING -----------------------------------------------------------------
+          clinical_signs_filtering = c(&quot;malaise&quot;, &quot;diarrhoea&quot;),
+          antimicrobials_filtering = c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;),
+          lcs = 2, # the duration over which we perform the filtering on clinical signs
+          lam = 2, # the duration over which we perform the filtering on antimicrobials use
+# 2. INPUT ---------------------------------------------------------------------
+          antimicrobials_input = c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;),
+# 3. OUTPUT --------------------------------------------------------------------
+          clinical_signs_output = c(&quot;malaise&quot;, &quot;diarrhoea&quot;),
+          watching = 2) # the duration of the observation period</code></pre>
+<pre><code>## [[1]]
+##        disease
+## amu     FALSE TRUE
+##   FALSE  1989  276
+##   TRUE    149   54
+## 
+## [[2]]
+## 
+##  Fisher&#39;s Exact Test for Count Data
+## 
+## data:  x
+## p-value = 1.292e-07
+## alternative hypothesis: true odds ratio is not equal to 1
+## 95 percent confidence interval:
+##  1.828782 3.685931
+## sample estimates:
+## odds ratio 
+##   2.610425</code></pre>
+<p>Note that</p>
+<ul>
+<li><p>the durations over which the filterings on clinical signs (<code>lcs</code>) and antimicrobials use (<code>lam</code>) do not have to be identical (even though it doesn’t really make much sense if they are not);</p></li>
+<li><p>the sets of clinical signs used for filtering (<code>clinical_signs_filtering</code>) and the computation of the output (<code>clinical_signs_output</code>) do not need to be identical (even though it doesn’t really make much sense if they are not);</p></li>
+<li><p>the sets of antimicrobials used for filtering (<code>antimicrobials_filtering</code>) and the computation of the input (<code>antimicrobials_input</code>) do not need to be identical (even though it doesn’t really make much sense if they are not);</p></li>
+<li><p>the duration of observation (<code>watching</code>) of course is totally independent of the durations over which the filtering is performed (<code>lcs</code> and <code>lam</code>).</p></li>
+</ul>
+<p>Taking into account these above remarks, a simplified version of <code>pipeline1()</code> could be:</p>
+<pre class="r"><code>pipeline2 &lt;- function(df, clinical_signs = NULL, antimicrobials = NULL, filtering, watching, ...)
+  pipeline1(df, clinical_signs, antimicrobials, filtering, filtering, antimicrobials, clinical_signs, watching, ...)</code></pre>
+<p>And a call of this function would look like:</p>
+<pre class="r"><code>a &lt;- pipeline2(viparc,
+# 1. DEFINING THE CLINICAL SIGNS WE CONSIDER -----------------------------------
+          clinical_signs = c(&quot;malaise&quot;, &quot;diarrhoea&quot;),
+# 2. DEFINING THE ANTIMICROBIALS USAGES WE CONSIDER ----------------------------
+          antimicrobials = c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;),
+# 3. THE DURATION OF THE PERIOD BEFORE THE FOCAL WEEK OVER WHICH WE DO THE FILTERING
+          filtering = 2,
+# 4. THE DURATION OF THE PERIOD AFTER THE FOCAL WEEK OVER WHICH WE OBSERVE -----
+          watching = 2)</code></pre>
+<p>Let’s explore the structure of the produced object:</p>
+<pre class="r"><code>str(a)</code></pre>
+<pre><code>## List of 2
+##  $ : &#39;table&#39; int [1:2, 1:2] 1989 149 276 54
+##   ..- attr(*, &quot;dimnames&quot;)=List of 2
+##   .. ..$ amu    : chr [1:2] &quot;FALSE&quot; &quot;TRUE&quot;
+##   .. ..$ disease: chr [1:2] &quot;FALSE&quot; &quot;TRUE&quot;
+##  $ :List of 7
+##   ..$ p.value    : num 1.29e-07
+##   ..$ conf.int   : num [1:2] 1.83 3.69
+##   .. ..- attr(*, &quot;conf.level&quot;)= num 0.95
+##   ..$ estimate   : Named num 2.61
+##   .. ..- attr(*, &quot;names&quot;)= chr &quot;odds ratio&quot;
+##   ..$ null.value : Named num 1
+##   .. ..- attr(*, &quot;names&quot;)= chr &quot;odds ratio&quot;
+##   ..$ alternative: chr &quot;two.sided&quot;
+##   ..$ method     : chr &quot;Fisher&#39;s Exact Test for Count Data&quot;
+##   ..$ data.name  : chr &quot;x&quot;
+##   ..- attr(*, &quot;class&quot;)= chr &quot;htest&quot;</code></pre>
+<p>Thanks to <code>pipeline2()</code>, it’s very easy to explore different options for the analysis. For example, let’s compare this</p>
+<pre class="r"><code>pipeline2(viparc,
+# 1. DEFINING THE CLINICAL SIGNS WE CONSIDER -----------------------------------
+          clinical_signs = c(&quot;malaise&quot;, &quot;diarrhoea&quot;),
+# 2. DEFINING THE ANTIMICROBIALS USAGES WE CONSIDER ----------------------------
+          antimicrobials = c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;),
+# 3. THE DURATION OF THE PERIOD BEFORE THE FOCAL WEEK OVER WHICH WE DO THE FILTERING
+          filtering = 2,
+# 4. THE DURATION OF THE PERIOD AFTER THE FOCAL WEEK OVER WHICH WE OBSERVE -----
+          watching = 2)</code></pre>
+<pre><code>## [[1]]
+##        disease
+## amu     FALSE TRUE
+##   FALSE  1989  276
+##   TRUE    149   54
+## 
+## [[2]]
+## 
+##  Fisher&#39;s Exact Test for Count Data
+## 
+## data:  x
+## p-value = 1.292e-07
+## alternative hypothesis: true odds ratio is not equal to 1
+## 95 percent confidence interval:
+##  1.828782 3.685931
+## sample estimates:
+## odds ratio 
+##   2.610425</code></pre>
+<p>with this:</p>
+<pre class="r"><code>pipeline2(viparc,
+# 1. DEFINING THE CLINICAL SIGNS WE CONSIDER -----------------------------------
+          clinical_signs = c(&quot;malaise&quot;, &quot;diarrhoea&quot;, &quot;respiratory&quot;),
+# 2. DEFINING THE ANTIMICROBIALS USAGES WE CONSIDER ----------------------------
+          antimicrobials = c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;),
+# 3. THE DURATION OF THE PERIOD BEFORE THE FOCAL WEEK OVER WHICH WE DO THE FILTERING
+          filtering = 2,
+# 4. THE DURATION OF THE PERIOD AFTER THE FOCAL WEEK OVER WHICH WE OBSERVE -----
+          watching = 2)</code></pre>
+<pre><code>## [[1]]
+##        disease
+## amu     FALSE TRUE
+##   FALSE  1886  296
+##   TRUE    143   54
+## 
+## [[2]]
+## 
+##  Fisher&#39;s Exact Test for Count Data
+## 
+## data:  x
+## p-value = 1.481e-06
+## alternative hypothesis: true odds ratio is not equal to 1
+## 95 percent confidence interval:
+##  1.684194 3.397440
+## sample estimates:
+## odds ratio 
+##   2.404935</code></pre>
+<p>If you want all the clinical signs and all the antimicrobials:</p>
+<pre class="r"><code>pipeline2(viparc, filtering = 2, watching = 2)</code></pre>
+<pre><code>## [[1]]
+##        disease
+## amu     FALSE TRUE
+##   FALSE  1345  244
+##   TRUE    149   62
+## 
+## [[2]]
+## 
+##  Fisher&#39;s Exact Test for Count Data
+## 
+## data:  x
+## p-value = 2.046e-06
+## alternative hypothesis: true odds ratio is not equal to 1
+## 95 percent confidence interval:
+##  1.625418 3.207310
+## sample estimates:
+## odds ratio 
+##   2.292422</code></pre>
+</div>
+<div id="using-logistic-regression-with-covariables" class="section level3">
+<h3>Using logistic regression with covariables</h3>
+<p>We can use similar rational in order to define pipeline functions that perform logistic regression with covariables. Let’s first define the following function that puts together the summary and the likelihood ratio test of a GML:</p>
+<pre class="r"><code>sum_lrt &lt;- function(mod) {
+  list(summary(mod), anova(mod, test = &quot;LRT&quot;))
+}</code></pre>
+<p>Then, the logistic regression pipeline with full flexibility in the interface:</p>
+<pre class="r"><code>pipeline3 &lt;- function(df, clinical_signs_filtering = NULL, antimicrobials_filtering = NULL, lcs,
+                      lam, antimicrobials_input = NULL, clinical_signs_output = NULL, watching,
+                      antimicrobials_week1 = NULL, wk, antimicrobials_watching = NULL) {
+  require(magrittr)
+  var_names &lt;- setdiff(names(df), c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;))
+  cs_names &lt;- grep(&quot;_use$&quot;, var_names, value = TRUE, invert = TRUE)
+  am_names &lt;- grep(&quot;_use$&quot;, var_names, value = TRUE)
+  if (is.null(clinical_signs_filtering)) clinical_signs_filtering &lt;- cs_names
+  if (is.null(clinical_signs_output)) clinical_signs_output &lt;- cs_names
+  if (is.null(antimicrobials_filtering)) antimicrobials_filtering &lt;- am_names
+  if (is.null(antimicrobials_input)) antimicrobials_input &lt;- am_names
+  if (is.null(antimicrobials_week1)) antimicrobials_week1 &lt;- am_names
+  if (is.null(antimicrobials_watching)) antimicrobials_watching &lt;- am_names
+  df %&gt;% 
+    filter_weeks(clinical_signs_filtering, antimicrobials_filtering, lcs, lam) %&gt;% 
+    make_input(antimicrobials_input) %&gt;% 
+    make_output(clinical_signs_output, watching) %&gt;% 
+    first_week(antimicrobials_week1, wk) %&gt;% 
+    make_output(antimicrobials_watching, watching, &quot;amu_use&quot;) %&gt;% 
+    dplyr::filter(include) %&gt;% 
+    dplyr::select(farm, flock, week, amu_first_week, amu_use, amu, disease) %&gt;% 
+    na.exclude() %&gt;% 
+    glm(disease ~ amu_first_week + amu_use + week + amu, binomial, .) %&gt;% 
+    sum_lrt()
+}</code></pre>
+<p>A wrapper with reduce flexibility in the interface:</p>
+<pre class="r"><code>pipeline4 &lt;- function(df, clinical_signs = NULL, antimicrobials = NULL, filtering, watching, first_wks)
+  pipeline3(df, clinical_signs, antimicrobials, filtering, filtering, antimicrobials, clinical_signs, watching, antimicrobials, first_wks, antimicrobials)</code></pre>
+<p>Let’s try it:</p>
+<pre class="r"><code>pipeline4(viparc, filtering = 2, watching = 2, first_wks = 1)</code></pre>
+<pre><code>## [[1]]
+## 
+## Call:
+## glm(formula = disease ~ amu_first_week + amu_use + week + amu, 
+##     family = binomial, data = .)
+## 
+## Deviance Residuals: 
+##     Min       1Q   Median       3Q      Max  
+## -1.4857  -0.2355  -0.1570  -0.1570   3.2104  
+## 
+## Coefficients:
+##                    Estimate Std. Error z value Pr(&gt;|z|)    
+## (Intercept)         0.54505    0.19232   2.834  0.00459 ** 
+## amu_first_weekTRUE -1.05510    0.16712  -6.313 2.73e-10 ***
+## amu_useTRUE         0.37422    0.15664   2.389  0.01689 *  
+## week               -0.21865    0.01945 -11.240  &lt; 2e-16 ***
+## amuTRUE            -1.91238    0.17521 -10.915  &lt; 2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## (Dispersion parameter for binomial family taken to be 1)
+## 
+##     Null deviance: 2459.3  on 6413  degrees of freedom
+## Residual deviance: 1898.0  on 6409  degrees of freedom
+## AIC: 1908
+## 
+## Number of Fisher Scoring iterations: 7
+## 
+## 
+## [[2]]
+## Analysis of Deviance Table
+## 
+## Model: binomial, link: logit
+## 
+## Response: disease
+## 
+## Terms added sequentially (first to last)
+## 
+## 
+##                Df Deviance Resid. Df Resid. Dev  Pr(&gt;Chi)    
+## NULL                            6413     2459.3              
+## amu_first_week  1  205.920      6412     2253.3 &lt; 2.2e-16 ***
+## amu_use         1  142.479      6411     2110.9 &lt; 2.2e-16 ***
+## week            1   86.751      6410     2024.1 &lt; 2.2e-16 ***
+## amu             1  126.083      6409     1898.0 &lt; 2.2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
+</div>
 </div>
 
 
@@ -878,6 +1141,23 @@ $(document).ready(function () {
 
 
 </script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open')
+  });
+});
+</script>
+
+<!-- code folding -->
+
 
 <!-- dynamically load mathjax for compatibility with self-contained -->
 <script>
