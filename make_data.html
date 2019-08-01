@@ -7,6 +7,7 @@
 <meta charset="utf-8" />
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
 
 
 
@@ -342,18 +343,6 @@ summary {
 }
 </style>
 
-<script>
-$(document).ready(function () {
-  window.buildTabsets("TOC");
-});
-
-$(document).ready(function () {
-  $('.tabset-dropdown > .nav-tabs > li').click(function () {
-    $(this).parent().toggleClass('nav-tabs-open')
-  });
-});
-</script>
-
 <!-- code folding -->
 
 
@@ -427,6 +416,7 @@ title wherever you want to display the reference list.
 +   dplyr::mutate_at(dplyr::vars(dplyr::ends_with(&quot;_g&quot;)), list(~ . &gt; 0)) %&gt;%
 +   dplyr::rename_at(dplyr::vars(dplyr::ends_with(&quot;_g&quot;)), function(x) sub(&quot;_g$&quot;, &quot;_use&quot;, x)) %&gt;% 
 +   dplyr::select(-completed, -nb_chicken, -sampling) %&gt;% 
++   unique() %&gt;% # week 10 of flock 6 of farm 75-021 is duplicated
 +   write.csv(&quot;data/viparc_qualitative.csv&quot;, FALSE, row.names = FALSE)</code></pre>
 </div>
 
@@ -447,6 +437,23 @@ $(document).ready(function () {
 
 
 </script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open')
+  });
+});
+</script>
+
+<!-- code folding -->
+
 
 <!-- dynamically load mathjax for compatibility with self-contained -->
 <script>
