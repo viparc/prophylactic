@@ -3,7 +3,7 @@
 .RData
 .Ruserdata
 .dropbox
-figure methods.key
+figure*
 *.docx
 .DS_Store
 making datasets.R
