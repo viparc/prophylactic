@@ -55,99 +55,100 @@ options(width = 137)
 
 Here we aim at testing whether the prophylactic use of antibiotics (exposure)
 has an effect on the occurence of clinical signs (outcome). The main challenge
-in this analysis concerns the preparation of the data (essentially in order to
-have AMU that can be considered prophylactic) and the overall strategy is
-described in **Figure 1**.
+in this analysis is the preparation of the data in such a way that AMU exposure
+can be considered prophylactic AMU exposure. The overall strategy for data
+preparation is described in **Figure 1**.
 
-<div style="text-align:center">
-  <img src="figure1.png" width="600"/>
-</div>
+<div style="text-align:center"> <img src="figure1.png" width="600"/> </div>
 
 **Figure 1: Preparation of data before analysis.** The horizontal arrow
-represent the time line of a flock, divided into weeks represented by rectangles,
-starting on week 1 (on the left). For any given week *w* (represented here by
-the hashed rectangle), (i) an exposure variable is computed based on the use or
-not of antibiotics (step 1, in green), as well as (ii) an outcome variable based
-on the occurence or not of clinical signs over an *observation period* of *x*
-weeks after week *w* (step 2, in red). Statistical analyses will consist in
-investigating whether AMU on week *w* affects the occurence of clinical signs 
-over the observation period. In order to make sure that AMU exposure on week *w*
-does correspond to AMU that we can consider as *prophylactic*, we need to filter
-out from the analysis all the weeks *w* preceded by (i) the presence of clinical
-signs over the *y* weeks before week *w* (including week *w*) and (ii) AMU over
-the *z* weeks before week *w* (naturally excluding week *w* since this
-information is used to compute the exposure). This step 0 is shown in blue on
-the figure. Finally, the analysis may include potential confounding factors
-(shown in orange) such as the age of the chicken (i.e. week *w*) as well as AMU
-during the first *a* weeks of the flock (in grey) and during the *x* weeks of
-the observation period.
+represents the time line of a flock, divided into weeks that are represented by
+rectangles, starting on week 1 (on the left). For any given week *w*
+(represented here by the hashed rectangle), we compute (i) an exposure variable
+based on the use or not of antibiotics on week *w* (step 1, in green) and (ii)
+an outcome variable based on the occurence or not of clinical signs over an
+*observation period* of *x* weeks after week *w* (step 2, in red). Statistical
+analyses will consist in investigating whether AMU on week *w* (exposure)
+affects the occurence of clinical signs over the observation period (outcome).
+In order to make sure that AMU exposure on week *w* does correspond to AMU that
+we can consider as *prophylactic*, we need to filter out from the analysis all
+the weeks *w* preceded by (i) the presence of clinical signs over the *y* weeks
+before week *w* (including week *w*) and (ii) AMU over the *z* weeks before week
+*w* (naturally excluding week *w* since this information is used to compute the
+exposure variable). This step 0 is shown in blue on the figure. Finally, the
+analysis may include potential confounding factors (shown in orange) such as the
+age of the chicken (i.e. week *w*) as well as AMU during the first *a* weeks of
+the flock's life (in grey) and during the *x* weeks of the observation period.
 
 Note that the duration *y* over which the filtering based on clinical signs is
-done does not have to be equal to the duration *z* over which the filtering
-based on AMU is done, although it probably makes sense if they are. On
-**Figure 1**, CS corresponds to a given set of clinical signs and AMU and AMU
+done and the duration *z* over which the filtering based on AMU is done do not
+have to be identical, although it probably makes sense if they are. On
+**Figure 1**, CS corresponds to a given set of clinical signs and AMU
 corresponds to a given set of antimicrobials. Note that the sets of clinical
-signs used for the filtering does not have to be identical to the set of
-clinical signs used to compute the outcome, although, again, it probably makes
-sense if they are. Same remark for the sets of antimicrobials used for the
-filtering and the computation of the exposure and the confounding variables over
+signs used for the filtering process and the computation of the outcome variable
+do not have to be identical, although, again, it probably makes sense if they
+are. Same remark for the sets of antimicrobials used for the filtering process,
+and the computations of the exposure variable and the confounding variables over
 the first weeks of the flock and the observation period. In the code below, we
 create the following 4 functions allowing us to prepare the data according to
 the strategy outlined in **Figure 1**:
 
-* `make_exposure(df, antimicrobials)`: computes the exposure variable on week
-*w*, using the set of `antimicrobials` antimicrobials.
+* `make_exposure(df, antimicrobials)` computes a boolean exposure variable using
+  the set of `antimicrobials` antimicrobials of the data frame `df`.
 
-* `make_outcome(df, outcome, loc, name = "disease")`: computes the outcome
-variable of the `loc` weeks that follow week *w* and using the set `outcome` of
-clinical signs. `name` is the name that is given to this new variable. Note that
-this function will also be used to compute the AMU covariable during the
-observation period and `outcome` will then contain the set of antimicrobials to
-consider.
+* `make_outcome(df, outcome, loc)` computes a boolean outcome variable for the
+  `loc` weeks that follow week *w*, using the set `outcome` of clinical signs of
+  the data frame `df`. Note that this function will also be used to compute the
+  AMU covariable during the observation period, in which case `outcome` will
+  then contain the set of antimicrobials to consider.
 
-* `prophylactic(df, clinical_signs, antimicrobials, lcs, lam)`: performs the
-fitering of the week (rows of the data frame `df`), using the set
-`clinical_signs` of clinical signs over `lcs` weeks before week *w* and the set
-`antimicrobials` of antimicrobials over `lam` weeks before week *w*.
+* `prophylactic(df, clinical_signs, antimicrobials, lcs, lam)` computes a
+  boolean variable expressing whether any given week of the data `df` can be
+  including in the analysis or not. This is based on the filtering process
+  explained in **figure 1** and considering the `clinical_signs` set of clinical
+  signs over the `lcs` weeks before week *w* (including week *w*) and the
+  `antimicrobials` set of antimicrobials over `lam` weeks before week *w*
+  (excluding week *w*).
 
-* `first_weeks(df, antimicrobials, wk = 1)`: computes AMU covariable during the
-first weeks of the flock, using the set `antimicrobials` of antimicrobials. `wk`
-is the duration, in weeks, of this early stage that is considered for the
-computation.
+* `first_weeks(df, antimicrobials, wk)`: computes the boolean AMU covariable
+  during the first `wk` weeks of the flock' life, using the `antimicrobials` set
+  of antimicrobials.
 
-In these 4 functions, `df` is a data frame of the structure of viparc data. All
-of these functions return the input data frame `df` augmented with the computed
-variable. These 4 functions are design so that they assemble perfectly well into
-pipelines. Once the data are prepared, the analysis can be performed by
-different statistical tests / models:
+In these 4 functions, `df` is a data frame of the structure of viparc data, as
+described [here](https://viparc.github.io/clires_data). These 4 functions are
+designed so that they assemble perfectly well into pipelines. Once the data are
+prepared, the analysis can be performed by different statistical tests / models:
 
-* the simplest one is certainely a **Fisher exact test**. However, it appears
-that both prophylactic AMU and the occurence of clinical signs strongly depends
-on the age of the flock (as well as, to a lesser extend, on the AMU during the
-first week of the flock and the observation period). For that reason, we
-considered more sophisticatted analyses allowing to correct for confounding
+* the simplest one is certainely a [**Fisher exact test**](#FET). However, it
+appears that both prophylactic AMU and the occurence of clinical signs strongly
+depends on the age of the flock (as well as, to a lesser extend, on the AMU
+during the first weeks of the flock and the observation period). For that reason,
+we considered more sophisticatted analyses allowing to correct for confounding
 effects. These are
 
-* **logistic regression**. Here, we compared correction by partial likelihood
-ratio tests and **stratification**. It produces similar results. Because the
-effect of age on the occurence of clinical signs may be non-linear we also
-considered
+* [**logistic regression**](#GLM). Here, we compared correction by partial
+likelihood ratio tests and **stratification**. It produces similar results.
+Because the effect of age on the occurence of clinical signs may be non-linear
+we also considered
 
-* **general additive models** in order to model the age - outcome relationship
-in a as flexible way as possible. After the preliminary analyses shown below, it
-is this option that we selected for full analysis.
+* [**general additive models**](#GAM) in order to model the age - outcome
+relationship in an as flexible way as possible. After the preliminary analyses
+shown below, it is this option that we selected for full analysis.
 
-We developped an number of pipelines combining both data preparation and 
-data analysis. `pipeline3()` is based on GLM and `pipeline5()` is based on GAM.
-`pipeline4()` and `pipeline6()` are the same as `pipeline3()` and `pipeline5()`,
-with simplified interfaces. We created 3 functions that allows to explore
-relationship in various situations:
+We then developped an number of [pipelines](#pipelines) combining both data
+preparation and data analysis. `pipeline1()` is based on the Fisher exact test,
+`pipeline3()` is based on the GLM and `pipeline5()` is based on the GAM.
+`pipeline2()`, `pipeline4()` and `pipeline6()` are the same as `pipeline1()`,
+`pipeline3()` and `pipeline5()` respectively, with simplified interfaces. At the
+[end](#end), we created 3 functions that allows to explore the exposure -
+outcome relationships using various choices for the definitions of the duration
+of the first week, the filtering periods and the observation period, as well as
+the definition of the sets of antimicrobials and clinical signs to consider:
 
-* `run_plan(pipeline, df, ...)` runs  the pipeline `pipeline` on the data frame
+* `run_plan(pipeline, df, ...)` runs the pipeline `pipeline` on the data frame
 `df` using the sets of parameters as defined by `...`.
 
-* `develop()` and `simplify()` allows to manipulate the output of `run_plan()`
-for better visualization.
+* `develop()` and `simplify()` allow to manipulate the output of `run_plan()`.
   
 ## Packages
 
@@ -159,7 +160,7 @@ to_install <- setdiff(required, row.names(installed.packages()))
 if (length(to_install)) install.packages(to_install)
 ```
 
-Loading `magrittr` and `tibble`:
+Loading `magrittr` for interactive use:
 
 ```{r}
 library(magrittr)
@@ -180,19 +181,25 @@ We have 3 types of variables in this data frame:
 * AMU (presence / absence too) with the `r ncol(viparc) - 9` variables
   `amoxicillin_use` to `unknown_use`.
 
-## Weeks inclusion
+For the purpose of the examples used below, we will used the following sets of
+antimicrobials and clinical signs:
+
+```{r}
+am_set <- c("colistin_use", "oxytetracycline_use")
+cs_set <- c("malaise", "diarrhoea")
+```
+
+## Filtering out weeks
 
 The week we are interested in are the weeks for which
 
 * there is no clinical signs during the weeks $w, \dots, w - x$;
 * there is no AMU during the weeks $w - 1, \dots, w - y$.
 
-Note here that the first point can apply to any set of clinical signs and that
-the second point can apply to any set of antimicrobials. Here, we build the
-function `prophylactic()` that performs that filtering. This function makes use
-of the function `lagging()` defined below and that lags some variables (defined
-in the `var` vector) of a data frame `df` that must have at least 3 columns
-named respectively `farm`, `flock` and `week`:
+Here, we build the function `prophylactic()` that helps performing this
+filtering. This function makes use of the function `lagging()` defined below and
+that lags the variables `var` of the data frame `df`. Note that this later must
+have at least 3 columns named respectively `farm`, `flock` and `week`.
 
 ```{r}
 lagging <- function(df, var, lag) {
@@ -208,7 +215,7 @@ lagging <- function(df, var, lag) {
 Let's try it:
 
 ```{r}
-lapply(0:2, lagging, df = viparc, var = c("colistin_use", "oxytetracycline_use")) %>% 
+lapply(0:2, lagging, df = viparc, var = am_set) %>% 
   purrr::reduce(dplyr::full_join, c("farm", "flock", "week")) %>% 
   dplyr::left_join(viparc, ., c("farm", "flock", "week")) %>% 
   dplyr::select(farm, flock, week, dplyr::matches("colistin|oxytetracycline"))
@@ -239,8 +246,8 @@ Let's try it:
 
 ```{r}
 viparc %>% 
-  dplyr::mutate(prphlctc = prophylactic(., c("malaise", "diarrhoea"), c("colistin_use", "oxytetracycline_use"), 2, 2)) %>% 
-  dplyr::select(farm, flock, week, colistin_use, oxytetracycline_use, malaise, diarrhoea, prphlctc) %>%
+  dplyr::mutate(prphlctc = prophylactic(., cs_set, am_set, 2, 2)) %>% 
+  dplyr::select(farm, flock, week, am_set, cs_set, prphlctc) %>%
   head(20)
 ```
 
@@ -248,20 +255,14 @@ The filtering can be performed in one step:
 
 ```{r}
 viparc %>% 
-  dplyr::filter(prophylactic(., c("malaise", "diarrhoea"), c("colistin_use", "oxytetracycline_use"), 2, 2))
+  dplyr::filter(prophylactic(., cs_set, am_set, 2, 2))
 ```
 
-Seems to work as expected. As you can see, `prophylactic()` returns the orginal
-data set augmented with a boolean variable named `include` specifying, for each
-week, whether it's included in the analysis or not. Next section puts this weeks
-selection together with the computations of an exposure and an outcome, by
-defining the functions `make_exposure()` and `make_outcome()`.
+Seems to work as expected.
 
 ## Computing clinical signs outcomes
 
-Let's start with the `make_outcome()` function, which is another use of the
-`lagging()` function in order to generate the outcome variables in terms of
-clinical signs:
+The `make_outcome()` function is another use of the `lagging()` function:
 
 ```{r}
 make_outcome <- function(df, outcome, loc) {
@@ -277,20 +278,15 @@ make_outcome <- function(df, outcome, loc) {
 ```
 
 where `outcome` is a vector of clinical signs names used to compute the outcome,
-`loc` is the duration, in weeks, of the observation period and `name` is the name
-of the generated variable. Let's try it:
+`loc` is the duration, in weeks, of the observation period. Let's try it:
 
 ```{r}
 viparc[356:386, ] %>% 
-  dplyr::mutate(disease = make_outcome(., c("malaise", "diarrhoea"), 2)) %>% 
-  dplyr::select(farm, flock, week, malaise, diarrhoea, disease)
+  dplyr::mutate(disease = make_outcome(., cs_set, 2)) %>% 
+  dplyr::select(farm, flock, week, cs_set, disease)
 ```
 
-Seems to work as expected. Note again that this function, similarly to the
-`prophylactic()` function, returns the original data frame augmented with a
-boolean variable of the name specified by `name` specifying whether there is the
-presence of the outcome of not. Note also the missing values at the end of the
-flocks too. Let's now see the definition of the `make_exposure()` function.
+Seems to work as expected. Note the missing values at the end of the flocks.
 
 ## Computing AMU exposure
 
@@ -311,14 +307,11 @@ considered to compute the exposure. Let's try it:
 
 ```{r}
 viparc %>% 
-  dplyr::mutate(amu = make_exposure(., c("colistin_use", "oxytetracycline_use"))) %>% 
-  dplyr::select(farm, flock, week, colistin_use, oxytetracycline_use, amu)
+  dplyr::mutate(amu = make_exposure(., am_set)) %>% 
+  dplyr::select(farm, flock, week, am_set, amu)
 ```
 
-Seems to work as expected. Note again that, similarly to the `prophylactic()`
-and `make_outcome()` functions, this function returns the original data frame
-augmented with an additional boolean variable `amu` specifying whether there is
-AMU exposure or not.
+Seems to work as expected.
 
 ## Optional: covariables
 
@@ -331,9 +324,9 @@ The two other variables are respectively computed by the `first_weeks()` and
 
 ### AMU during the first week(s)
 
-The following function augmentes the data frame `df` with a boolean variable that
-specify whether any of the antimicrobials defined in the `antimicrobials` vector
-has been used during the first `wk` weeks:
+The following function computes a boolean variable that specifies whether any of
+the antimicrobials defined in the `antimicrobials` vector has been used during
+the first `wk` weeks of the flock's life:
 
 ```{r}
 first_weeks <- function(df, antimicrobials, wk = 1) {
@@ -352,24 +345,24 @@ Let's try it:
 
 ```{r}
 viparc %>% 
-  dplyr::mutate(amu_first_weeks = first_weeks(., c("amoxicillin_use", "ampicillin_use"))) %>%
-  dplyr::select(farm, flock, week, amoxicillin_use, ampicillin_use, amu_first_weeks)
+  dplyr::mutate(amu_first_weeks = first_weeks(., am_set)) %>%
+  dplyr::select(farm, flock, week, am_set, amu_first_weeks)
 ```
 
 And with the first 2 weeks:
 
 ```{r}
 viparc %>% 
-  dplyr::mutate(amu_first_weeks = first_weeks(., c("amoxicillin_use", "ampicillin_use"), 2)) %>% 
-  dplyr::select(farm, flock, week, amoxicillin_use, ampicillin_use, amu_first_weeks)
+  dplyr::mutate(amu_first_weeks = first_weeks(., am_set, 2)) %>% 
+  dplyr::select(farm, flock, week, am_set, amu_first_weeks)
 ```
 
 Looking at another cycle from another farm:
 
 ```{r}
 viparc %>% 
-  dplyr::mutate(amu_first_weeks = first_weeks(., c("amoxicillin_use", "ampicillin_use"))) %>% 
-  dplyr::select(farm, flock, week, amoxicillin_use, ampicillin_use, amu_first_weeks) %>% 
+  dplyr::mutate(amu_first_weeks = first_weeks(., am_set)) %>% 
+  dplyr::select(farm, flock, week, am_set, amu_first_weeks) %>% 
   dplyr::filter(farm == "75-013")
 ```
 
@@ -383,8 +376,8 @@ above:
 
 ```{r}
 viparc %>%
-  dplyr::mutate(amu_observation = make_outcome(., c("amoxicillin_use", "ampicillin_use"), 2)) %>% 
-  dplyr::select(farm, flock, week, amoxicillin_use, ampicillin_use, amu_observation) %>%
+  dplyr::mutate(amu_observation = make_outcome(., am_set, 2)) %>% 
+  dplyr::select(farm, flock, week, am_set, amu_observation) %>%
   head(20)
 ```
 
@@ -393,49 +386,49 @@ viparc %>%
 Here we show how to assemble the functions `prophylactic()`, `make_exposure()`,
 `make_outcome()` and `first_weeks()` into a pipeline to test a hypothesis.
 
-**WARNING:** in these pipelines, the filtering of the weeks should always be the
-last step of the data preparation, just before the statistical analysis.
+**WARNING 1:** in these pipelines, the filtering of the weeks should always be
+the last step of the data preparation, just before the statistical analysis.
 
-### Fisher exact test
+**WARNING 2:** `na.exclude()` calls should always be done after the selection of
+variables.
+
+For the sake of the examples, we will consider the following data:
+
+```{r}
+(data1 <- viparc %>% 
+  dplyr::mutate(amu = make_exposure(., am_set),
+                disease = make_outcome(., cs_set, 2)) %>% 
+  dplyr::filter(prophylactic(., cs_set, am_set, 2, 2)) %>%
+  dplyr::select(amu, disease) %>% 
+  na.exclude())
+```
+
+### Fisher exact test {#FET}
 
 Simple use of a Fisher exact test, without any co-variable:
 
 ```{r}
-viparc %>% 
-  dplyr::mutate(amu = make_exposure(., c("colistin_use", "oxytetracycline_use")),
-                disease = make_outcome(., c("malaise", "diarrhoea"), 2)) %>% 
-  dplyr::filter(prophylactic(., c("malaise", "diarrhoea"),
-                             c("colistin_use", "oxytetracycline_use"), 2, 2)) %>%
-  # (filtering has to be after make_exposure() and make_outcome() calls)
-  dplyr::select(amu, disease) %>% 
-  na.exclude() %T>% print() %$% # na.exclude() has to be after the selection
+data1 %$%
   table(amu, disease) %T>% print() %>% 
   fisher.test()
 ```
 
-### Logistic regression
+### Logistic regression {#GLM}
 
 A logistic regression can equivalently be used:
 
 ```{r}
-viparc %>% 
-  dplyr::mutate(amu = make_exposure(., c("colistin_use", "oxytetracycline_use")),
-                disease = make_outcome(., c("malaise", "diarrhoea"), 2)) %>% 
-  dplyr::filter(prophylactic(., c("malaise", "diarrhoea"),
-                             c("colistin_use", "oxytetracycline_use"), 2, 2)) %>% 
-  dplyr::select(amu, disease) %>% 
-  na.exclude() %T>% print() %T>% {with(., table(amu, disease)) %>% print()} %>% 
+data1 %>% 
   glm(disease ~ amu, binomial, .) %>% 
   summary()
 ```
 
 where the estimate of the coefficient (`amuTRUE`) is the log odds ratio.
 
-### Correcting for potential confounders
+### Correcting for potential confounders {#GAM}
 
 In this section we address the problem of confounders and explore on an
-example different options to control for them. The best options appears the use
-of a GAM.
+example different options to control for them.
 
 #### The presence of potential counfounders
 
@@ -461,15 +454,13 @@ add_suffix(letters[1:5], 1:3)
 Let's now consider the following example:
 
 ```{r}
-(tmp <- viparc %>% 
-  dplyr::mutate(amu = make_exposure(., c("colistin_use", "oxytetracycline_use")),
-                disease = make_outcome(., c("malaise", "diarrhoea"), 2),
-                amu_first_weeks = first_weeks(., c("colistin_use", "oxytetracycline_use")),
-                amu_observation = make_outcome(., c("colistin_use", "oxytetracycline_use"), 2)) %>% 
-  dplyr::filter(prophylactic(., c("malaise", "diarrhoea"),
-                             c("colistin_use", "oxytetracycline_use"), 2, 2)) %>% 
-  dplyr::select(amu, disease, week, amu_first_weeks, amu_observation) %>% 
-  na.exclude())
+(data2 <- viparc %>% 
+  dplyr::mutate(amu = make_exposure(., am_set),
+                disease = make_outcome(., cs_set, 2),
+                amu_first_weeks = first_weeks(., am_set),
+                amu_observation = make_outcome(., am_set, 2)) %>% 
+  dplyr::filter(prophylactic(., cs_set, am_set, 2, 2)) %>% 
+  dplyr::select(amu, disease, week, amu_first_weeks, amu_observation))
 ```
 
 As we can see below, both exposure (`amu`) and outcome (`disease`) depend on
@@ -477,13 +468,13 @@ As we can see below, both exposure (`amu`) and outcome (`disease`) depend on
 
 ```{r}
 purrr::map(add_suffix(c("amu", "disease"), paste(" ~", c("week", "amu_first_weeks", "amu_observation"))),
-    ~ .x %>% 
-        formula() %>% 
-        glm(binomial, tmp) %>% 
-        summary() %>% 
-        coef() %>% 
-        `[`(2, 4) %>% 
-        data.frame(model = .x, p = ., stringsAsFactors = FALSE)) %>% 
+           ~ .x %>% 
+             formula() %>% 
+             glm(binomial, na.exclude(data2)) %>% 
+             summary() %>% 
+             coef() %>% 
+             `[`(2, 4) %>% 
+             data.frame(model = .x, p = ., stringsAsFactors = FALSE)) %>% 
   dplyr::bind_rows()
 ```
 
@@ -493,12 +484,18 @@ potential confounders that need to be corrected for.
 #### Correcting for potential confounders
 
 If one wants to consider (and correct for) covariables -- such as age, AMU on
-the first week or AMU after the focal week (age of the birds) --, the pipeline
-would look as below:
+the first week or AMU during the observation period --, the pipeline would look
+as below:
 
 ```{r}
-tmp %T>% print() %T>% {dplyr::group_by(., amu, disease, amu_first_weeks, amu_observation) %>% dplyr::tally() %>% dplyr::ungroup() %>% print()} %>%  
-  glm(disease ~ amu_first_weeks + amu_observation + week + amu, binomial, .) %T>% {summary(.) %>% print()} %>% 
+data2 %>% 
+  na.exclude() %T>%
+  {dplyr::group_by(., amu, disease, amu_first_weeks, amu_observation) %>%
+     dplyr::tally() %>%
+     dplyr::ungroup() %>%
+     print()} %>%  
+  glm(disease ~ amu_first_weeks + amu_observation + week + amu, binomial, .) %T>%
+  {summary(.) %>% print()} %>% 
   anova(test = "LRT")
 ```
 
@@ -511,55 +508,41 @@ exposure not significant anymore. Furthermore the estimated odds ratio is now
 below 1. Let's try to drop the `week` variable:
 
 ```{r}
-viparc %>% 
-  dplyr::mutate(amu = make_exposure(., c("colistin_use", "oxytetracycline_use")), 
-                disease = make_outcome(., c("malaise", "diarrhoea"), 2),
-                amu_first_weeks = first_weeks(., c("colistin_use", "oxytetracycline_use")),
-                amu_observation = make_outcome(., c("colistin_use", "oxytetracycline_use"), 2)) %>% 
-  dplyr::filter(prophylactic(., c("malaise", "diarrhoea"),
-                             c("colistin_use", "oxytetracycline_use"), 2, 2)) %>% 
-  dplyr::select(amu, disease, amu_first_weeks, amu_observation) %>% 
+data2 %>% 
+  dplyr::select(-week) %>% 
   na.exclude() %>%  
   glm(disease ~ amu_first_weeks + amu_observation + amu, binomial, .) %T>% {summary(.) %>% print()} %>% 
   anova(test = "LRT")
 ```
 
-which suggest that the `week` variable (i.e. the age of the flock) is really the
-variable that causes the spurious relationship between prophylactic use (`amu`)
-and occurence of infection (`disease`). Let's try again with `week` but this
-time also including interaction with `amu`:
+which suggests that the `week` variable (i.e. the age of the flock) is really
+the variable that causes the spurious relationship between prophylactic use
+(`amu`) and occurence of infection (`disease`). Let's try again with `week` but
+this time also including interaction with `amu`:
 
 ```{r}
-anova(glm(disease ~ amu_first_weeks + amu_observation + week * amu, binomial, tmp), test = "LRT")
+data2 %>% 
+  na.exclude() %>%  
+  glm(disease ~ amu_first_weeks + amu_observation + week * amu, binomial, .) %>% 
+  anova(test = "LRT")
 ```
 
 It doesn't really help. Let's try modeling the age effect in a more flexible way
 than a linear relationship, using GAM:
 
 ```{r}
-summary(mgcv::gam(disease ~ amu_first_weeks + amu_observation + s(week) + amu, binomial, tmp))
+summary(mgcv::gam(disease ~ amu_first_weeks + amu_observation + s(week) + amu,
+                  binomial, na.exclude(data2)))
 ```
 
 Not better. Let's try to stratify. For example, under the age of 6 weeks there
-seems to have not much effect of `week`, `amu_first_weeks` and `amu_observation`.
-See. Let's consider for that this data set:
+seems to have not much effect of `week`, `amu_first_weeks` and
+`amu_observation`. Look at the significativity of the confounders for the
+1-5-week age strata:
 
 ```{r}
-tmp2 <- viparc %>% 
-  dplyr::mutate(amu = make_exposure(., c("colistin_use", "oxytetracycline_use")),
-                disease = make_outcome(., c("malaise", "diarrhoea"), 2),
-                amu_first_weeks = first_weeks(., c("colistin_use", "oxytetracycline_use")),
-                amu_observation = make_outcome(., c("colistin_use", "oxytetracycline_use"), 2)) %>% 
-  dplyr::filter(prophylactic(., c("malaise", "diarrhoea"),
-                             c("colistin_use", "oxytetracycline_use"), 2, 2))
-```
-
-Look at the significativity of the confounders for the 1-5-week age strata:
-
-```{r}
-tmp2 %>% 
+data2 %>%
   dplyr::filter(week < 6) %>% 
-  dplyr::select(amu, disease, week, amu_first_weeks, amu_observation) %>% 
   na.exclude() %>%  
   glm(disease ~ amu_first_weeks + amu_observation + week + amu, binomial, .) %>% 
   anova(test = "LRT")
@@ -568,9 +551,8 @@ tmp2 %>%
 and for the 1-6-week age strata:
 
 ```{r}
-tmp2 %>% 
+data2 %>% 
   dplyr::filter(week < 7) %>% 
-  dplyr::select(amu, disease, week, amu_first_weeks, amu_observation) %>% 
   na.exclude() %>%  
   glm(disease ~ amu_first_weeks + amu_observation + week + amu, binomial, .) %>% 
   anova(test = "LRT")
@@ -580,7 +562,7 @@ Let's thus consider the 6-weeks threshold and investigate the relationship
 between `disease` and `amu`:
 
 ```{r}
-tmp2 %>% 
+data2 %>% 
   dplyr::filter(week < 6) %>% 
   dplyr::select(amu, disease) %>% 
   na.exclude() %>%  
@@ -591,7 +573,10 @@ tmp2 %>%
 No significant relationship between prophylaxy and disease occurence in the
 1-to-6-week age band.
 
-## Pipelines
+## Pipelines {#pipelines}
+
+In this section we show how to build pipelines that combine data preparation and
+data analysis.
 
 ### Using the Fisher exact test
 
@@ -633,36 +618,18 @@ Let's try it:
 ```{r}
 pipeline1(viparc,
 # 1. FILTERING -----------------------------------------------------------------
-          clinical_signs_filtering = c("malaise", "diarrhoea"),
-          antimicrobials_filtering = c("colistin_use", "oxytetracycline_use"),
+          clinical_signs_filtering = cs_set,
+          antimicrobials_filtering = am_set,
           lcs = 2, # the duration over which we perform the filtering on clinical signs
           lam = 2, # the duration over which we perform the filtering on antimicrobials use
 # 2. INPUT ---------------------------------------------------------------------
-          antimicrobials_input = c("colistin_use", "oxytetracycline_use"),
+          antimicrobials_input = am_set,
 # 3. OUTPUT --------------------------------------------------------------------
-          clinical_signs_output = c("malaise", "diarrhoea"),
+          clinical_signs_output = cs_set,
           watching = 2) # the duration of the observation period
 ```
 
-Note that
-
-* the durations over which the filterings on clinical signs (`lcs`) and
-  antimicrobials use (`lam`) do not have to be identical (even though it doesn't
-  really make much sense if they are not);
-  
-* the sets of clinical signs used for filtering (`clinical_signs_filtering`) and
-  the computation of the output (`clinical_signs_output`) do not need to be
-  identical (even though it doesn't really make much sense if they are not);
-  
-* the sets of antimicrobials used for filtering (`antimicrobials_filtering`) and
-  the computation of the input (`antimicrobials_input`) do not need to be
-  identical (even though it doesn't really make much sense if they are not);
-  
-* the duration of observation (`watching`) of course is totally independent of
-  the durations over which the filtering is performed (`lcs` and `lam`).
-
-Taking into account these above remarks, a simplified version of `pipeline1()`
-could be:
+A simplified version of `pipeline1()` could be:
 
 ```{r}
 pipeline2 <- function(df, clinical_signs = NULL, antimicrobials = NULL, filtering, watching, ...)
@@ -674,9 +641,9 @@ And a call of this function would look like:
 ```{r}
 a <- pipeline2(viparc,
 # 1. DEFINING THE CLINICAL SIGNS WE CONSIDER -----------------------------------
-          clinical_signs = c("malaise", "diarrhoea"),
+          clinical_signs = cs_set,
 # 2. DEFINING THE ANTIMICROBIALS USAGES WE CONSIDER ----------------------------
-          antimicrobials = c("colistin_use", "oxytetracycline_use"),
+          antimicrobials = am_set,
 # 3. THE DURATION OF THE PERIOD BEFORE THE FOCAL WEEK OVER WHICH WE DO THE FILTERING
           filtering = 2,
 # 4. THE DURATION OF THE PERIOD AFTER THE FOCAL WEEK OVER WHICH WE OBSERVE -----
@@ -695,9 +662,9 @@ analysis. For example, let's compare this
 ```{r}
 pipeline2(viparc,
 # 1. DEFINING THE CLINICAL SIGNS WE CONSIDER -----------------------------------
-          clinical_signs = c("malaise", "diarrhoea"),
+          clinical_signs = cs_set,
 # 2. DEFINING THE ANTIMICROBIALS USAGES WE CONSIDER ----------------------------
-          antimicrobials = c("colistin_use", "oxytetracycline_use"),
+          antimicrobials = am_set,
 # 3. THE DURATION OF THE PERIOD BEFORE THE FOCAL WEEK OVER WHICH WE DO THE FILTERING
           filtering = 2,
 # 4. THE DURATION OF THE PERIOD AFTER THE FOCAL WEEK OVER WHICH WE OBSERVE -----
@@ -709,9 +676,9 @@ with this:
 ```{r}
 pipeline2(viparc,
 # 1. DEFINING THE CLINICAL SIGNS WE CONSIDER -----------------------------------
-          clinical_signs = c("malaise", "diarrhoea", "respiratory"),
+          clinical_signs = c(cs_set, "respiratory"),
 # 2. DEFINING THE ANTIMICROBIALS USAGES WE CONSIDER ----------------------------
-          antimicrobials = c("colistin_use", "oxytetracycline_use"),
+          antimicrobials = am_set,
 # 3. THE DURATION OF THE PERIOD BEFORE THE FOCAL WEEK OVER WHICH WE DO THE FILTERING
           filtering = 2,
 # 4. THE DURATION OF THE PERIOD AFTER THE FOCAL WEEK OVER WHICH WE OBSERVE -----
@@ -727,7 +694,7 @@ pipeline2(viparc, filtering = 2, watching = 2)
 ### Using logistic regression with covariables
 
 We can use similar rationale in order to define pipeline functions that perform
-logistic regression with covariables:
+logistic regressions with covariables:
 
 ```{r}
 pipeline3 <- function(df, clinical_signs_filtering = NULL, antimicrobials_filtering = NULL, lcs,
@@ -755,7 +722,7 @@ pipeline3 <- function(df, clinical_signs_filtering = NULL, antimicrobials_filter
 }
 ```
 
-A wrapper with reduce flexibility in the interface:
+A wrapper with reduced flexibility in the interface:
 
 ```{r}
 pipeline4 <- function(df, clinical_signs = NULL, antimicrobials = NULL, filtering, watching, first_wks)
@@ -814,7 +781,7 @@ pipeline6(viparc, filtering = 2, watching = 2, first_wks = 1) %>%
   summary()
 ```
 
-## Exploring the effects of durations
+## Exploring the effects of durations and sets {#end}
 
 ### With GLM
 
@@ -827,7 +794,7 @@ get_outputs <- function (x, ...) {
  }
 ```
 
-Let's now define a `glm` method for that generic:
+Let's now define a `glm` method for that generic function:
 
 ```{r}
 get_outputs.glm <- function(x) {
@@ -847,12 +814,19 @@ Let's try it:
 get_outputs(pipeline4(viparc, filtering = 2, watching = 2, first_wks = 1))
 ```
 
-Let's now run it on a batch of durations values:
+Let's now define a batch of durations values:
 
 ```{r}
-expand.grid(filtering = 1:2, watching = 1:2, first_wks = 1:2) %>% 
+(batch <- expand.grid(filtering = 1:2, watching = 1:2, first_wks = 1:2))
+```
+
+And let's run `pipeline4()` on this batch:
+
+```{r}
+batch %>% 
   purrr::pmap(pipeline4, df = viparc) %>% 
-  lapply(get_outputs)
+  lapply(get_outputs) %>% 
+  head(2)
 ```
 
 ### With GAM
@@ -881,7 +855,7 @@ get_outputs(pipeline6(viparc, filtering = 2, watching = 2, first_wks = 1))
 Let's now run it on a batch of durations values, and put the output in shape:
 
 ```{r}
-(tmp <- expand.grid(filtering = 1:2, watching = 1:2, first_wks = 1:2) %>% 
+batch %>% 
   tibble::as_tibble() %>%
   assign("plan", ., 1) %>% # saving intermediate value
   purrr::pmap(pipeline6, df = viparc) %>% 
@@ -889,7 +863,7 @@ Let's now run it on a batch of durations values, and put the output in shape:
   purrr::transpose() %>%
   tibble::as_tibble() %>% 
   dplyr::mutate_at(c("n", "or", "p"), unlist) %>% 
-  dplyr::bind_cols(plan, .)) # intermediate value re-used here
+  dplyr::bind_cols(plan, .) # intermediate value re-used here
 ```
 
 Let's make a function out of this above code:
@@ -919,7 +893,7 @@ run_plan <- function(f, df, clinical_signs = NULL, antimicrobials = NULL, filter
 }
 ```
 
-Let's also write two function that will help the visualization of the output of
+Let's also write two functions that will help the exploration of the outputs of
 the `run_plan()` function. The first one develops the list of clinical signs and
 / or antimicrobials so that they can easily be read in the data frame:
 
@@ -934,7 +908,7 @@ develop <- function(df, var = NULL) {
 }
 ```
 
-The second one remove the columns that contain no variability:
+The second one removes the columns that contain no variability:
 
 ```{r}
 simplify <- function(df) {
@@ -958,7 +932,7 @@ different durations of the filtering period:
 (tmp <- run_plan(pipeline6, viparc, filtering = 1:2))
 ```
 
-Note that you can access the cotingency tables this way:
+Note that you can access the contingency tables this way:
 
 ```{r}
 tmp$ct
