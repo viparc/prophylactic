@@ -2875,6 +2875,8 @@ script &lt;- readLines(&quot;prophylactic.R&quot;)
 writeLines(script[-(seq_len(which(grepl(&quot;starts here&quot;, script))),
                     which(grepl(&quot;ends here&quot;, script)):length(script))],
            &quot;prophylactic.R&quot;)</code></pre>
+<p>To execute the code:</p>
+<pre class="r"><code>source(&quot;prophylactic&quot;)</code></pre>
 </div>
 
 

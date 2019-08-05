@@ -1000,3 +1000,9 @@ writeLines(script[-(seq_len(which(grepl("starts here", script))),
            "prophylactic.R")
 ```
 
+To execute the code:
+
+```{r eval = FALSE}
+source("prophylactic")
+```
+
