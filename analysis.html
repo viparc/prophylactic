@@ -1755,13 +1755,15 @@ if (length(to_install)) install.packages(to_install)</code></pre>
   df %&gt;%
     dplyr::filter(week &lt; wk + 1) %&gt;%
     dplyr::group_by(farm, flock) %&gt;% 
-    dplyr::group_modify(~ tibble::tibble(amu_first_weeks = any(unlist(.x[, antimicrobials])))) %&gt;% 
+    dplyr::group_modify(~ tibble::tibble(out = any(unlist(.x[, antimicrobials])))) %&gt;% 
     dplyr::ungroup() %&gt;% 
-    dplyr::left_join(df, ., c(&quot;farm&quot;, &quot;flock&quot;))
+    dplyr::left_join(df, ., c(&quot;farm&quot;, &quot;flock&quot;)) %&gt;% 
+    dplyr::select(out) %&gt;% 
+    unlist()
 }</code></pre>
 <p>Let’s try it:</p>
 <pre class="r"><code>viparc %&gt;% 
-  first_weeks(c(&quot;amoxicillin_use&quot;, &quot;ampicillin_use&quot;)) %&gt;% 
+  dplyr::mutate(amu_first_weeks = first_weeks(., c(&quot;amoxicillin_use&quot;, &quot;ampicillin_use&quot;))) %&gt;%
   dplyr::select(farm, flock, week, amoxicillin_use, ampicillin_use, amu_first_weeks)</code></pre>
 <pre><code>## # A tibble: 5,564 x 6
 ##    farm   flock  week amoxicillin_use ampicillin_use amu_first_weeks
@@ -1779,7 +1781,7 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 ## # … with 5,554 more rows</code></pre>
 <p>And with the first 2 weeks:</p>
 <pre class="r"><code>viparc %&gt;% 
-  first_weeks(c(&quot;amoxicillin_use&quot;, &quot;ampicillin_use&quot;), 2) %&gt;% 
+  dplyr::mutate(amu_first_weeks = first_weeks(., c(&quot;amoxicillin_use&quot;, &quot;ampicillin_use&quot;), 2)) %&gt;% 
   dplyr::select(farm, flock, week, amoxicillin_use, ampicillin_use, amu_first_weeks)</code></pre>
 <pre><code>## # A tibble: 5,564 x 6
 ##    farm   flock  week amoxicillin_use ampicillin_use amu_first_weeks
@@ -1797,7 +1799,7 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 ## # … with 5,554 more rows</code></pre>
 <p>Looking at another cycle from another farm:</p>
 <pre class="r"><code>viparc %&gt;% 
-  first_weeks(c(&quot;amoxicillin_use&quot;, &quot;ampicillin_use&quot;)) %&gt;% 
+  dplyr::mutate(amu_first_weeks = first_weeks(., c(&quot;amoxicillin_use&quot;, &quot;ampicillin_use&quot;))) %&gt;% 
   dplyr::select(farm, flock, week, amoxicillin_use, ampicillin_use, amu_first_weeks) %&gt;% 
   dplyr::filter(farm == &quot;75-013&quot;)</code></pre>
 <pre><code>## # A tibble: 54 x 6
@@ -1968,7 +1970,7 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 <pre class="r"><code>(tmp &lt;- viparc %&gt;% 
   dplyr::mutate(amu = make_exposure(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;))) %&gt;% 
   dplyr::mutate(disease = make_outcome(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2)) %&gt;% 
-  first_weeks(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)) %&gt;% 
+  dplyr::mutate(amu_first_weeks = first_weeks(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;))) %&gt;% 
   dplyr::mutate(amu_observation = make_outcome(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2)) %&gt;% 
   dplyr::filter(prophylactic(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;),
                              c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, 2)) %&gt;% 
@@ -2094,7 +2096,7 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 <pre class="r"><code>viparc %&gt;% 
   dplyr::mutate(amu = make_exposure(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;))) %&gt;% 
   dplyr::mutate(disease = make_outcome(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2)) %&gt;% 
-  first_weeks(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)) %&gt;% 
+  dplyr::mutate(amu_first_weeks = first_weeks(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;))) %&gt;% 
   dplyr::mutate(amu_observation = make_outcome(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2)) %&gt;% 
   dplyr::filter(prophylactic(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;),
                              c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, 2)) %&gt;% 
@@ -2193,7 +2195,7 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 <pre class="r"><code>tmp2 &lt;- viparc %&gt;% 
   dplyr::mutate(amu = make_exposure(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;))) %&gt;% 
   dplyr::mutate(disease = make_outcome(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2)) %&gt;% 
-  first_weeks(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)) %&gt;% 
+  dplyr::mutate(amu_first_weeks = first_weeks(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;))) %&gt;% 
   dplyr::mutate(amu_observation = make_outcome(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2)) %&gt;% 
   dplyr::filter(prophylactic(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;),
                              c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, 2))</code></pre>
@@ -2461,7 +2463,7 @@ if (length(to_install)) install.packages(to_install)</code></pre>
   df %&gt;% 
     dplyr::mutate(amu = make_exposure(., antimicrobials_input)) %&gt;% 
     dplyr::mutate(disease = make_outcome(., clinical_signs_output, watching)) %&gt;% 
-    first_weeks(antimicrobials_week1, wk) %&gt;% 
+    dplyr::mutate(amu_first_weeks = first_weeks(., antimicrobials_week1, wk)) %&gt;% 
     dplyr::mutate(amu_observation = make_outcome(., antimicrobials_watching, watching)) %&gt;% 
     dplyr::filter(prophylactic(., clinical_signs_filtering, antimicrobials_filtering, lcs, lam)) %&gt;% 
     dplyr::select(farm, flock, week, amu_first_weeks, amu_observation, amu, disease) %&gt;% 
@@ -2538,7 +2540,7 @@ if (length(to_install)) install.packages(to_install)</code></pre>
   df %&gt;% 
     dplyr::mutate(amu = make_exposure(., antimicrobials_input)) %&gt;% 
     dplyr::mutate(disease = make_outcome(., clinical_signs_output, watching)) %&gt;% 
-    first_weeks(antimicrobials_week1, wk) %&gt;% 
+    dplyr::mutate(amu_first_weeks = first_weeks(., antimicrobials_week1, wk)) %&gt;% 
     dplyr::mutate(amu_observation = make_outcome(., antimicrobials_watching, watching)) %&gt;% 
     dplyr::filter(prophylactic(., clinical_signs_filtering, antimicrobials_filtering, lcs, lam)) %&gt;% 
     dplyr::select(farm, flock, week, amu_first_weeks, amu_observation, amu, disease) %&gt;% 

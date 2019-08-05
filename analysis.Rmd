@@ -340,9 +340,11 @@ first_weeks <- function(df, antimicrobials, wk = 1) {
   df %>%
     dplyr::filter(week < wk + 1) %>%
     dplyr::group_by(farm, flock) %>% 
-    dplyr::group_modify(~ tibble::tibble(amu_first_weeks = any(unlist(.x[, antimicrobials])))) %>% 
+    dplyr::group_modify(~ tibble::tibble(out = any(unlist(.x[, antimicrobials])))) %>% 
     dplyr::ungroup() %>% 
-    dplyr::left_join(df, ., c("farm", "flock"))
+    dplyr::left_join(df, ., c("farm", "flock")) %>% 
+    dplyr::select(out) %>% 
+    unlist()
 }
 ```
 
@@ -350,7 +352,7 @@ Let's try it:
 
 ```{r}
 viparc %>% 
-  first_weeks(c("amoxicillin_use", "ampicillin_use")) %>% 
+  dplyr::mutate(amu_first_weeks = first_weeks(., c("amoxicillin_use", "ampicillin_use"))) %>%
   dplyr::select(farm, flock, week, amoxicillin_use, ampicillin_use, amu_first_weeks)
 ```
 
@@ -358,7 +360,7 @@ And with the first 2 weeks:
 
 ```{r}
 viparc %>% 
-  first_weeks(c("amoxicillin_use", "ampicillin_use"), 2) %>% 
+  dplyr::mutate(amu_first_weeks = first_weeks(., c("amoxicillin_use", "ampicillin_use"), 2)) %>% 
   dplyr::select(farm, flock, week, amoxicillin_use, ampicillin_use, amu_first_weeks)
 ```
 
@@ -366,7 +368,7 @@ Looking at another cycle from another farm:
 
 ```{r}
 viparc %>% 
-  first_weeks(c("amoxicillin_use", "ampicillin_use")) %>% 
+  dplyr::mutate(amu_first_weeks = first_weeks(., c("amoxicillin_use", "ampicillin_use"))) %>% 
   dplyr::select(farm, flock, week, amoxicillin_use, ampicillin_use, amu_first_weeks) %>% 
   dplyr::filter(farm == "75-013")
 ```
@@ -462,7 +464,7 @@ Let's now consider the following example:
 (tmp <- viparc %>% 
   dplyr::mutate(amu = make_exposure(., c("colistin_use", "oxytetracycline_use"))) %>% 
   dplyr::mutate(disease = make_outcome(., c("malaise", "diarrhoea"), 2)) %>% 
-  first_weeks(c("colistin_use", "oxytetracycline_use")) %>% 
+  dplyr::mutate(amu_first_weeks = first_weeks(., c("colistin_use", "oxytetracycline_use"))) %>% 
   dplyr::mutate(amu_observation = make_outcome(., c("colistin_use", "oxytetracycline_use"), 2)) %>% 
   dplyr::filter(prophylactic(., c("malaise", "diarrhoea"),
                              c("colistin_use", "oxytetracycline_use"), 2, 2)) %>% 
@@ -512,7 +514,7 @@ below 1. Let's try to drop the `week` variable:
 viparc %>% 
   dplyr::mutate(amu = make_exposure(., c("colistin_use", "oxytetracycline_use"))) %>% 
   dplyr::mutate(disease = make_outcome(., c("malaise", "diarrhoea"), 2)) %>% 
-  first_weeks(c("colistin_use", "oxytetracycline_use")) %>% 
+  dplyr::mutate(amu_first_weeks = first_weeks(., c("colistin_use", "oxytetracycline_use"))) %>% 
   dplyr::mutate(amu_observation = make_outcome(., c("colistin_use", "oxytetracycline_use"), 2)) %>% 
   dplyr::filter(prophylactic(., c("malaise", "diarrhoea"),
                              c("colistin_use", "oxytetracycline_use"), 2, 2)) %>% 
@@ -546,7 +548,7 @@ See. Let's consider for that this data set:
 tmp2 <- viparc %>% 
   dplyr::mutate(amu = make_exposure(., c("colistin_use", "oxytetracycline_use"))) %>% 
   dplyr::mutate(disease = make_outcome(., c("malaise", "diarrhoea"), 2)) %>% 
-  first_weeks(c("colistin_use", "oxytetracycline_use")) %>% 
+  dplyr::mutate(amu_first_weeks = first_weeks(., c("colistin_use", "oxytetracycline_use"))) %>% 
   dplyr::mutate(amu_observation = make_outcome(., c("colistin_use", "oxytetracycline_use"), 2)) %>% 
   dplyr::filter(prophylactic(., c("malaise", "diarrhoea"),
                              c("colistin_use", "oxytetracycline_use"), 2, 2))
@@ -744,7 +746,7 @@ pipeline3 <- function(df, clinical_signs_filtering = NULL, antimicrobials_filter
   df %>% 
     dplyr::mutate(amu = make_exposure(., antimicrobials_input)) %>% 
     dplyr::mutate(disease = make_outcome(., clinical_signs_output, watching)) %>% 
-    first_weeks(antimicrobials_week1, wk) %>% 
+    dplyr::mutate(amu_first_weeks = first_weeks(., antimicrobials_week1, wk)) %>% 
     dplyr::mutate(amu_observation = make_outcome(., antimicrobials_watching, watching)) %>% 
     dplyr::filter(prophylactic(., clinical_signs_filtering, antimicrobials_filtering, lcs, lam)) %>% 
     dplyr::select(farm, flock, week, amu_first_weeks, amu_observation, amu, disease) %>% 
@@ -789,7 +791,7 @@ pipeline5 <- function(df, clinical_signs_filtering = NULL, antimicrobials_filter
   df %>% 
     dplyr::mutate(amu = make_exposure(., antimicrobials_input)) %>% 
     dplyr::mutate(disease = make_outcome(., clinical_signs_output, watching)) %>% 
-    first_weeks(antimicrobials_week1, wk) %>% 
+    dplyr::mutate(amu_first_weeks = first_weeks(., antimicrobials_week1, wk)) %>% 
     dplyr::mutate(amu_observation = make_outcome(., antimicrobials_watching, watching)) %>% 
     dplyr::filter(prophylactic(., clinical_signs_filtering, antimicrobials_filtering, lcs, lam)) %>% 
     dplyr::select(farm, flock, week, amu_first_weeks, amu_observation, amu, disease) %>% 
