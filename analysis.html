@@ -2868,7 +2868,7 @@ cs_set &lt;- c(&quot;malaise&quot;, &quot;diarrhoea&quot;)</code></pre>
 <h2>Running the script locally</h2>
 <p>You can download the R markdown file used to generate this page as so:</p>
 <pre class="r"><code>download.file(&quot;https://raw.githubusercontent.com/viparc/prophylactic/master/analysis.Rmd&quot;, &quot;prophylactic.Rmd&quot;)</code></pre>
-<p>You can transforme this R markdown document in an R script as so:</p>
+<p>You can transforme this <code>prophylactic.Rmd</code> R markdown document in an R script named <code>prophylactic.R</code> as so:</p>
 <pre class="r"><code>if (!require(&quot;kintr&quot;)) install.packages(&quot;knitr&quot;)
 knitr::purl(&quot;prophylactic.Rmd&quot;)
 script &lt;- readLines(&quot;prophylactic.R&quot;)

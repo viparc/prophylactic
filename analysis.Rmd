@@ -988,7 +988,8 @@ You can download the R markdown file used to generate this page as so:
 download.file("https://raw.githubusercontent.com/viparc/prophylactic/master/analysis.Rmd", "prophylactic.Rmd")
 ```
 
-You can transforme this R markdown document in an R script as so:
+You can transforme this `prophylactic.Rmd` R markdown document in an R script
+named `prophylactic.R` as so:
 
 ```{r eval = FALSE}
 if (!require("kintr")) install.packages("knitr")
