@@ -1858,8 +1858,8 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 <h3>Fisher exact test</h3>
 <p>Simple use of a Fisher exact test, without any co-variable:</p>
 <pre class="r"><code>viparc %&gt;% 
-  dplyr::mutate(amu = make_exposure(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;))) %&gt;% 
-  dplyr::mutate(disease = make_outcome(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2)) %&gt;% 
+  dplyr::mutate(amu = make_exposure(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)),
+                disease = make_outcome(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2)) %&gt;% 
   dplyr::filter(prophylactic(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;),
                              c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, 2)) %&gt;%
   # (filtering has to be after make_exposure() and make_outcome() calls)
@@ -1901,8 +1901,8 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 <h3>Logistic regression</h3>
 <p>A logistic regression can equivalently be used:</p>
 <pre class="r"><code>viparc %&gt;% 
-  dplyr::mutate(amu = make_exposure(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;))) %&gt;% 
-  dplyr::mutate(disease = make_outcome(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2)) %&gt;% 
+  dplyr::mutate(amu = make_exposure(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)),
+                disease = make_outcome(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2)) %&gt;% 
   dplyr::filter(prophylactic(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;),
                              c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, 2)) %&gt;% 
   dplyr::select(amu, disease) %&gt;% 
@@ -1968,10 +1968,10 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 <pre><code>##  [1] &quot;a1&quot; &quot;b1&quot; &quot;c1&quot; &quot;d1&quot; &quot;e1&quot; &quot;a2&quot; &quot;b2&quot; &quot;c2&quot; &quot;d2&quot; &quot;e2&quot; &quot;a3&quot; &quot;b3&quot; &quot;c3&quot; &quot;d3&quot; &quot;e3&quot;</code></pre>
 <p>Let’s now consider the following example:</p>
 <pre class="r"><code>(tmp &lt;- viparc %&gt;% 
-  dplyr::mutate(amu = make_exposure(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;))) %&gt;% 
-  dplyr::mutate(disease = make_outcome(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2)) %&gt;% 
-  dplyr::mutate(amu_first_weeks = first_weeks(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;))) %&gt;% 
-  dplyr::mutate(amu_observation = make_outcome(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2)) %&gt;% 
+  dplyr::mutate(amu = make_exposure(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)),
+                disease = make_outcome(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2),
+                amu_first_weeks = first_weeks(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)),
+                amu_observation = make_outcome(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2)) %&gt;% 
   dplyr::filter(prophylactic(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;),
                              c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, 2)) %&gt;% 
   dplyr::select(amu, disease, week, amu_first_weeks, amu_observation) %&gt;% 
@@ -2094,10 +2094,10 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 <p><strong>NOTE:</strong> If one wanted to correct for potential farm and / or flock effect, he’d have to consider mixed effect models (not done here). (Not even sure we need to do this here.)</p>
 <p>Note that accounting for potential confounders makes the effect of the AMU exposure not significant anymore. Furthermore the estimated odds ratio is now below 1. Let’s try to drop the <code>week</code> variable:</p>
 <pre class="r"><code>viparc %&gt;% 
-  dplyr::mutate(amu = make_exposure(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;))) %&gt;% 
-  dplyr::mutate(disease = make_outcome(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2)) %&gt;% 
-  dplyr::mutate(amu_first_weeks = first_weeks(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;))) %&gt;% 
-  dplyr::mutate(amu_observation = make_outcome(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2)) %&gt;% 
+  dplyr::mutate(amu = make_exposure(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)), 
+                disease = make_outcome(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2),
+                amu_first_weeks = first_weeks(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)),
+                amu_observation = make_outcome(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2)) %&gt;% 
   dplyr::filter(prophylactic(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;),
                              c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, 2)) %&gt;% 
   dplyr::select(amu, disease, amu_first_weeks, amu_observation) %&gt;% 
@@ -2193,10 +2193,10 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 ## UBRE = -0.29795  Scale est. = 1         n = 2411</code></pre>
 <p>Not better. Let’s try to stratify. For example, under the age of 6 weeks there seems to have not much effect of <code>week</code>, <code>amu_first_weeks</code> and <code>amu_observation</code>. See. Let’s consider for that this data set:</p>
 <pre class="r"><code>tmp2 &lt;- viparc %&gt;% 
-  dplyr::mutate(amu = make_exposure(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;))) %&gt;% 
-  dplyr::mutate(disease = make_outcome(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2)) %&gt;% 
-  dplyr::mutate(amu_first_weeks = first_weeks(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;))) %&gt;% 
-  dplyr::mutate(amu_observation = make_outcome(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2)) %&gt;% 
+  dplyr::mutate(amu = make_exposure(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)),
+                disease = make_outcome(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2),
+                amu_first_weeks = first_weeks(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)),
+                amu_observation = make_outcome(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2)) %&gt;% 
   dplyr::filter(prophylactic(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;),
                              c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, 2))</code></pre>
 <p>Look at the significativity of the confounders for the 1-5-week age strata:</p>
@@ -2290,8 +2290,8 @@ if (length(to_install)) install.packages(to_install)</code></pre>
   if (is.null(antimicrobials_filtering)) antimicrobials_filtering &lt;- am_names
   if (is.null(antimicrobials_input)) antimicrobials_input &lt;- am_names
   df %&gt;% 
-    dplyr::mutate(amu = make_exposure(., antimicrobials_input)) %&gt;% # creates amu variable
-    dplyr::mutate(disease = make_outcome(., clinical_signs_output, watching)) %&gt;% # creates disease variable
+    dplyr::mutate(amu = make_exposure(., antimicrobials_input), # creates amu variable
+                  disease = make_outcome(., clinical_signs_output, watching)) %&gt;% # creates disease variable
     dplyr::filter(prophylactic(., clinical_signs_filtering, antimicrobials_filtering, lcs, lam)) %&gt;% 
     dplyr::select(amu, disease) %&gt;% 
     na.exclude() %$%
@@ -2461,10 +2461,10 @@ if (length(to_install)) install.packages(to_install)</code></pre>
   if (is.null(antimicrobials_week1)) antimicrobials_week1 &lt;- am_names
   if (is.null(antimicrobials_watching)) antimicrobials_watching &lt;- am_names
   df %&gt;% 
-    dplyr::mutate(amu = make_exposure(., antimicrobials_input)) %&gt;% 
-    dplyr::mutate(disease = make_outcome(., clinical_signs_output, watching)) %&gt;% 
-    dplyr::mutate(amu_first_weeks = first_weeks(., antimicrobials_week1, wk)) %&gt;% 
-    dplyr::mutate(amu_observation = make_outcome(., antimicrobials_watching, watching)) %&gt;% 
+    dplyr::mutate(amu = make_exposure(., antimicrobials_input),
+                  disease = make_outcome(., clinical_signs_output, watching),
+                  amu_first_weeks = first_weeks(., antimicrobials_week1, wk),
+                  amu_observation = make_outcome(., antimicrobials_watching, watching)) %&gt;% 
     dplyr::filter(prophylactic(., clinical_signs_filtering, antimicrobials_filtering, lcs, lam)) %&gt;% 
     dplyr::select(farm, flock, week, amu_first_weeks, amu_observation, amu, disease) %&gt;% 
     na.exclude() %&gt;% 
@@ -2538,10 +2538,10 @@ if (length(to_install)) install.packages(to_install)</code></pre>
   if (is.null(antimicrobials_week1)) antimicrobials_week1 &lt;- am_names
   if (is.null(antimicrobials_watching)) antimicrobials_watching &lt;- am_names
   df %&gt;% 
-    dplyr::mutate(amu = make_exposure(., antimicrobials_input)) %&gt;% 
-    dplyr::mutate(disease = make_outcome(., clinical_signs_output, watching)) %&gt;% 
-    dplyr::mutate(amu_first_weeks = first_weeks(., antimicrobials_week1, wk)) %&gt;% 
-    dplyr::mutate(amu_observation = make_outcome(., antimicrobials_watching, watching)) %&gt;% 
+    dplyr::mutate(amu = make_exposure(., antimicrobials_input),
+                  disease = make_outcome(., clinical_signs_output, watching),
+                  amu_first_weeks = first_weeks(., antimicrobials_week1, wk),
+                  amu_observation = make_outcome(., antimicrobials_watching, watching)) %&gt;% 
     dplyr::filter(prophylactic(., clinical_signs_filtering, antimicrobials_filtering, lcs, lam)) %&gt;% 
     dplyr::select(farm, flock, week, amu_first_weeks, amu_observation, amu, disease) %&gt;% 
     na.exclude() %&gt;% 
