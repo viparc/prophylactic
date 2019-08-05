@@ -1614,28 +1614,20 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 <p>It works as expected. Now we can define the <code>prophylactic()</code> function that uses the above-defined <code>lagging()</code> function:</p>
 <pre class="r"><code>prophylactic &lt;- function(df, clinical_signs, antimicrobials, lcs, lam) {
   require(magrittr)
-
-# stops if there is any missing values among the clinical signs and AMU
-# variables (this is a requirement from the lagging() function):
-  df %&gt;% 
-    dplyr::select(c(clinical_signs, antimicrobials)) %&gt;% 
-    anyNA() %&gt;% 
-    not() %&gt;% 
-    stopifnot()
-
   week_id &lt;- c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;)
-  
   purrr::map2(list(c(0, seq_len(lcs)), seq_len(lam)), # doing the lagging on clinical signs and AMU
               list(clinical_signs, antimicrobials),
               ~ purrr::map(.x, lagging, df = df, var = .y)) %&gt;%
     unlist(FALSE) %&gt;% 
     purrr::reduce(dplyr::left_join, week_id) %&gt;% # putting together into a single data frames
+# note: we don&#39;t need to join with the original data because the original data
+# is already here thanks to the lag of 0 in the above lagging() call to the clinical signs.    
     dplyr::select(-week_id) %&gt;% 
     dplyr::mutate_all(dplyr::coalesce, FALSE) %&gt;% # we want to get rid off FALSEs and also NAs
     rowSums() %&gt;%
     not()
 }</code></pre>
-<p>Note that the above pipeline assumes that there is no missing values in the <code>clinical_signs</code> or <code>antimicrobials</code> variables. (Hence the <code>stopifnot()</code> call at the beginning of the function.) Indeed, this is a requirement of the use of the <code>lagging()</code> function because this function does add some digit at the end of the variables names and also adds some missing values. For that reason, we need to make sure that the original data set does not have these characteristics. Let’s try it:</p>
+<p>Let’s try it:</p>
 <pre class="r"><code>viparc %&gt;% 
   dplyr::mutate(prphlctc = prophylactic(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;), c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, 2)) %&gt;% 
   dplyr::select(farm, flock, week, colistin_use, oxytetracycline_use, malaise, diarrhoea, prphlctc) %&gt;%
@@ -1693,19 +1685,19 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 <div id="computing-clinical-signs-outcomes" class="section level2">
 <h2>Computing clinical signs outcomes</h2>
 <p>Let’s start with the <code>make_outcome()</code> function, which is another use of the <code>lagging()</code> function in order to generate the outcome variables in terms of clinical signs:</p>
-<pre class="r"><code>make_outcome &lt;- function(df, outcome, loc, name = &quot;disease&quot;) {
+<pre class="r"><code>make_outcome &lt;- function(df, outcome, loc) {
   require(magrittr)
-  flock_id &lt;- c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;)
+  week_id &lt;- c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;)
   lapply(-seq_len(loc), lagging, df = df, var = outcome) %&gt;% # this is a list of loc slots
-    purrr::reduce(dplyr::left_join, flock_id) %&gt;% # puts together into a single data frame
-    dplyr::left_join(df, ., flock_id) %&gt;% # merges with original data frame
-    dplyr::mutate(!!name := dplyr::select(., dplyr::matches(&quot;-\\d+$&quot;)) %&gt;%
-                              rowSums() %&gt;%
-                              as.logical()) %&gt;%
-    dplyr::select(-dplyr::matches(&quot;\\d+$&quot;))
+    purrr::reduce(dplyr::left_join, week_id) %&gt;% # puts together into a single data frame
+    dplyr::left_join(df, ., week_id) %&gt;% # merges with original data frame
+    dplyr::select(dplyr::matches(&quot;-\\d+$&quot;)) %&gt;% 
+    rowSums() %&gt;% 
+    as.logical()
 }</code></pre>
 <p>where <code>outcome</code> is a vector of clinical signs names used to compute the outcome, <code>loc</code> is the duration, in weeks, of the observation period and <code>name</code> is the name of the generated variable. Let’s try it:</p>
-<pre class="r"><code>make_outcome(viparc[356:386, ], c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2) %&gt;% 
+<pre class="r"><code>viparc[356:386, ] %&gt;% 
+  dplyr::mutate(disease = make_outcome(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2)) %&gt;% 
   dplyr::select(farm, flock, week, malaise, diarrhoea, disease)</code></pre>
 <pre><code>## # A tibble: 31 x 6
 ##    farm   flock  week malaise diarrhoea disease
@@ -1824,7 +1816,8 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 <div id="amu-over-the-watching-period" class="section level3">
 <h3>AMU over the watching period</h3>
 <p>If one wants to compute a covariable accounting for AMU during the watching period, this can simply be done by reusing the <code>make_outcome()</code> function defined above:</p>
-<pre class="r"><code>viparc %&gt;% make_outcome(c(&quot;amoxicillin_use&quot;, &quot;ampicillin_use&quot;), 2, &quot;amu_observation&quot;) %&gt;% 
+<pre class="r"><code>viparc %&gt;%
+  dplyr::mutate(amu_observation = make_outcome(., c(&quot;amoxicillin_use&quot;, &quot;ampicillin_use&quot;), 2)) %&gt;% 
   dplyr::select(farm, flock, week, amoxicillin_use, ampicillin_use, amu_observation) %&gt;%
   head(20)</code></pre>
 <pre><code>## # A tibble: 20 x 6
@@ -1861,7 +1854,7 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 <p>Simple use of a Fisher exact test, without any co-variable:</p>
 <pre class="r"><code>viparc %&gt;% 
   make_exposure(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)) %&gt;% 
-  make_outcome(c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2) %&gt;% 
+  dplyr::mutate(disease = make_outcome(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2)) %&gt;% 
   dplyr::filter(prophylactic(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;),
                              c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, 2)) %&gt;%
   # (filtering has to after make_exposure() and make_outcome() calls)
@@ -1904,7 +1897,7 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 <p>A logistic regression can equivalently be used:</p>
 <pre class="r"><code>viparc %&gt;% 
   make_exposure(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)) %&gt;% 
-  make_outcome(c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2) %&gt;% 
+  dplyr::mutate(disease = make_outcome(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2)) %&gt;% 
   dplyr::filter(prophylactic(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;),
                              c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, 2)) %&gt;% 
   dplyr::select(amu, disease) %&gt;% 
@@ -1971,9 +1964,9 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 <p>Let’s now consider the following example:</p>
 <pre class="r"><code>(tmp &lt;- viparc %&gt;% 
   make_exposure(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)) %&gt;% 
-  make_outcome(c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2) %&gt;% 
+  dplyr::mutate(disease = make_outcome(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2)) %&gt;% 
   first_weeks(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)) %&gt;% 
-  make_outcome(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, &quot;amu_observation&quot;) %&gt;% 
+  dplyr::mutate(amu_observation = make_outcome(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2)) %&gt;% 
   dplyr::filter(prophylactic(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;),
                              c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, 2)) %&gt;% 
   dplyr::select(amu, disease, week, amu_first_weeks, amu_observation) %&gt;% 
@@ -2097,9 +2090,9 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 <p>Note that accounting for potential confounders makes the effect of the AMU exposure not significant anymore. Furthermore the estimated odds ratio is now below 1. Let’s try to drop the <code>week</code> variable:</p>
 <pre class="r"><code>viparc %&gt;% 
   make_exposure(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)) %&gt;% 
-  make_outcome(c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2) %&gt;% 
+  dplyr::mutate(disease = make_outcome(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2)) %&gt;% 
   first_weeks(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)) %&gt;% 
-  make_outcome(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, &quot;amu_observation&quot;) %&gt;% 
+  dplyr::mutate(amu_observation = make_outcome(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2)) %&gt;% 
   dplyr::filter(prophylactic(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;),
                              c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, 2)) %&gt;% 
   dplyr::select(amu, disease, amu_first_weeks, amu_observation) %&gt;% 
@@ -2196,9 +2189,9 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 <p>Not better. Let’s try to stratify. For example, under the age of 6 weeks there seems to have not much effect of <code>week</code>, <code>amu_first_weeks</code> and <code>amu_observation</code>. See. Let’s consider for that this data set:</p>
 <pre class="r"><code>tmp2 &lt;- viparc %&gt;% 
   make_exposure(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)) %&gt;% 
-  make_outcome(c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2) %&gt;% 
+  dplyr::mutate(disease = make_outcome(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;), 2)) %&gt;% 
   first_weeks(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)) %&gt;% 
-  make_outcome(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, &quot;amu_observation&quot;) %&gt;% 
+  dplyr::mutate(amu_observation = make_outcome(., c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2)) %&gt;% 
   dplyr::filter(prophylactic(., c(&quot;malaise&quot;, &quot;diarrhoea&quot;),
                              c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 2, 2))</code></pre>
 <p>Look at the significativity of the confounders for the 1-5-week age strata:</p>
@@ -2293,7 +2286,7 @@ if (length(to_install)) install.packages(to_install)</code></pre>
   if (is.null(antimicrobials_input)) antimicrobials_input &lt;- am_names
   df %&gt;% 
     make_exposure(antimicrobials_input) %&gt;% # creates amu variable
-    make_outcome(clinical_signs_output, watching, &quot;disease&quot;) %&gt;% # creates disease variable
+    dplyr::mutate(disease = make_outcome(., clinical_signs_output, watching)) %&gt;% # creates disease variable
     dplyr::filter(prophylactic(., clinical_signs_filtering, antimicrobials_filtering, lcs, lam)) %&gt;% 
     dplyr::select(amu, disease) %&gt;% 
     na.exclude() %$%
@@ -2464,9 +2457,9 @@ if (length(to_install)) install.packages(to_install)</code></pre>
   if (is.null(antimicrobials_watching)) antimicrobials_watching &lt;- am_names
   df %&gt;% 
     make_exposure(antimicrobials_input) %&gt;% 
-    make_outcome(clinical_signs_output, watching) %&gt;% 
+    dplyr::mutate(disease = make_outcome(., clinical_signs_output, watching)) %&gt;% 
     first_weeks(antimicrobials_week1, wk) %&gt;% 
-    make_outcome(antimicrobials_watching, watching, &quot;amu_observation&quot;) %&gt;% 
+    dplyr::mutate(amu_observation = make_outcome(., antimicrobials_watching, watching)) %&gt;% 
     dplyr::filter(prophylactic(., clinical_signs_filtering, antimicrobials_filtering, lcs, lam)) %&gt;% 
     dplyr::select(farm, flock, week, amu_first_weeks, amu_observation, amu, disease) %&gt;% 
     na.exclude() %&gt;% 
@@ -2541,9 +2534,9 @@ if (length(to_install)) install.packages(to_install)</code></pre>
   if (is.null(antimicrobials_watching)) antimicrobials_watching &lt;- am_names
   df %&gt;% 
     make_exposure(antimicrobials_input) %&gt;% 
-    make_outcome(clinical_signs_output, watching) %&gt;% 
+    dplyr::mutate(disease = make_outcome(., clinical_signs_output, watching)) %&gt;% 
     first_weeks(antimicrobials_week1, wk) %&gt;% 
-    make_outcome(antimicrobials_watching, watching, &quot;amu_observation&quot;) %&gt;% 
+    dplyr::mutate(amu_observation = make_outcome(., antimicrobials_watching, watching)) %&gt;% 
     dplyr::filter(prophylactic(., clinical_signs_filtering, antimicrobials_filtering, lcs, lam)) %&gt;% 
     dplyr::select(farm, flock, week, amu_first_weeks, amu_observation, amu, disease) %&gt;% 
     na.exclude() %&gt;% 
