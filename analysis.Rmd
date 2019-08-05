@@ -220,17 +220,7 @@ the above-defined `lagging()` function:
 ```{r}
 prophylactic <- function(df, clinical_signs, antimicrobials, lcs, lam) {
   require(magrittr)
-
-# stops if there is any missing values among the clinical signs and AMU
-# variables (this is a requirement from the lagging() function):
-  df %>% 
-    dplyr::select(c(clinical_signs, antimicrobials)) %>% 
-    anyNA() %>% 
-    not() %>% 
-    stopifnot()
-
   week_id <- c("farm", "flock", "week")
-  
   purrr::map2(list(c(0, seq_len(lcs)), seq_len(lam)), # doing the lagging on clinical signs and AMU
               list(clinical_signs, antimicrobials),
               ~ purrr::map(.x, lagging, df = df, var = .y)) %>%
@@ -243,13 +233,7 @@ prophylactic <- function(df, clinical_signs, antimicrobials, lcs, lam) {
 }
 ```
 
-Note that the above pipeline assumes that there is no missing values in the
-`clinical_signs` or `antimicrobials` variables. (Hence the `stopifnot()` call at
-the beginning of the function.) Indeed, this is a requirement of the use of the
-`lagging()` function because this function does add some digit at the end of the
-variables names and also adds some missing values. For that reason, we need to
-make sure that the original data set does not have these characteristics. Let's
-try it:
+Let's try it:
 
 ```{r}
 viparc %>% 
