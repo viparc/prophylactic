@@ -34,6 +34,8 @@ knitr::opts_chunk$set(cache = FALSE, autodep = TRUE, message = FALSE, warning = 
 options(width = 137)
 ```
 
+> If you want to run this code locally, look at the last two sections
+
 ## Introduction
 
 Here we aim at testing whether the prophylactic use of antibiotics (exposure)
@@ -674,7 +676,7 @@ If you want all the clinical signs and all the antimicrobials:
 pipeline2(viparc, filtering = 2, watching = 2)
 ```
 
-### Using logistic regression with covariables
+### Logistic regression with covariables
 
 We can use similar rationale in order to define pipeline functions that perform
 logistic regressions with covariables:
@@ -764,7 +766,7 @@ pipeline6(viparc, filtering = 2, watching = 2, first_wks = 1) %>%
   summary()
 ```
 
-## Exploring the effects of durations and sets {#end}
+## The effects of durations and sets {#end}
 
 ### With GLM
 
@@ -964,5 +966,36 @@ which is equivalent to:
 
 ```{r}
 develop(simplify(tmp))
+```
+
+## Session info
+
+The analyses were performed on the system and versions as defined below:
+
+```{r}
+sessionInfo(required)
+```
+
+If you want to run the code locally, you can copy and paste code chunks to your
+commands line. Make sure though that your system and packages versions are the
+same or more recent than the ones listed above.
+
+## Running the script locally
+
+You can download the R markdown file used to generate this page as so:
+
+```{r ends here, eval = FALSE}
+download.file("https://raw.githubusercontent.com/viparc/prophylactic/master/analysis.Rmd", "prophylactic.Rmd")
+```
+
+You can transforme this R markdown document in an R script as so:
+
+```{r eval = FALSE}
+if (!require("kintr")) install.packages("knitr")
+knitr::purl("prophylactic.Rmd")
+script <- readLines("prophylactic.R")
+writeLines(script[-(seq_len(which(grepl("starts here", script))),
+                    which(grepl("ends here", script)):length(script))],
+           "prophylactic.R")
 ```
 

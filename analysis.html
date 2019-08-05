@@ -1513,6 +1513,9 @@ pre, code {white-space:pre !important; overflow-x:scroll !important}
 
 html { overflow-x: scroll; }
 </style>
+<blockquote>
+<p>If you want to run this code locally, look at the last two sections</p>
+</blockquote>
 <div id="introduction" class="section level2">
 <h2>Introduction</h2>
 <p>Here we aim at testing whether the prophylactic use of antibiotics (exposure) has an effect on the occurence of clinical signs (outcome). The main challenge in this analysis is the preparation of the data in such a way that AMU exposure can be considered prophylactic AMU exposure. The overall strategy for data preparation is described in <strong>Figure 1</strong>.</p>
@@ -2379,8 +2382,8 @@ cs_set &lt;- c(&quot;malaise&quot;, &quot;diarrhoea&quot;)</code></pre>
 ## odds ratio 
 ##   2.398147</code></pre>
 </div>
-<div id="using-logistic-regression-with-covariables" class="section level3">
-<h3>Using logistic regression with covariables</h3>
+<div id="logistic-regression-with-covariables" class="section level3">
+<h3>Logistic regression with covariables</h3>
 <p>We can use similar rationale in order to define pipeline functions that perform logistic regressions with covariables:</p>
 <pre class="r"><code>pipeline3 &lt;- function(df, clinical_signs_filtering = NULL, antimicrobials_filtering = NULL, lcs,
                       lam, antimicrobials_input = NULL, clinical_signs_output = NULL, watching,
@@ -2515,7 +2518,7 @@ cs_set &lt;- c(&quot;malaise&quot;, &quot;diarrhoea&quot;)</code></pre>
 </div>
 </div>
 <div id="end" class="section level2">
-<h2>Exploring the effects of durations and sets</h2>
+<h2>The effects of durations and sets</h2>
 <div id="with-glm" class="section level3">
 <h3>With GLM</h3>
 <p>Let’s define an S3 generic function that extracts all the information that we are interested in from the output of an object of class <code>glm</code> or <code>mgcv</code>:</p>
@@ -2830,6 +2833,48 @@ cs_set &lt;- c(&quot;malaise&quot;, &quot;diarrhoea&quot;)</code></pre>
 ## 7 colistin_use                         2        2  3608 &lt;table&gt; &lt;table&gt; 0.903 0.764
 ## 8 colistin_use, cefotaxime_use         2        2  3606 &lt;table&gt; &lt;table&gt; 0.902 0.761</code></pre>
 </div>
+</div>
+<div id="session-info" class="section level2">
+<h2>Session info</h2>
+<p>The analyses were performed on the system and versions as defined below:</p>
+<pre class="r"><code>sessionInfo(required)</code></pre>
+<pre><code>## R version 3.6.1 (2019-07-05)
+## Platform: x86_64-apple-darwin15.6.0 (64-bit)
+## Running under: macOS Mojave 10.14.5
+## 
+## Matrix products: default
+## BLAS:   /Library/Frameworks/R.framework/Versions/3.6/Resources/lib/libRblas.0.dylib
+## LAPACK: /Library/Frameworks/R.framework/Versions/3.6/Resources/lib/libRlapack.dylib
+## 
+## locale:
+## [1] fr_FR.UTF-8/fr_FR.UTF-8/fr_FR.UTF-8/C/fr_FR.UTF-8/fr_FR.UTF-8
+## 
+## attached base packages:
+## character(0)
+## 
+## other attached packages:
+## [1] dplyr_0.8.2  magrittr_1.5 purrr_0.3.2  readr_1.3.1 
+## 
+## loaded via a namespace (and not attached):
+##  [1] Rcpp_1.0.2       knitr_1.23       splines_3.6.1    hms_0.4.2        grDevices_3.6.1  tidyselect_0.2.5 lattice_0.20-38 
+##  [8] R6_2.4.0         rlang_0.4.0      fansi_0.4.0      stringr_1.4.0    tools_3.6.1      utils_3.6.1      grid_3.6.1      
+## [15] nlme_3.1-140     mgcv_1.8-28      xfun_0.8         utf8_1.1.4       cli_1.1.0        htmltools_0.3.6  stats_3.6.1     
+## [22] datasets_3.6.1   yaml_2.2.0       digest_0.6.20    assertthat_0.2.1 tibble_2.1.3     base_3.6.1       crayon_1.3.4    
+## [29] Matrix_1.2-17    vctrs_0.2.0      graphics_3.6.1   zeallot_0.1.0    curl_4.0         glue_1.3.1       evaluate_0.14   
+## [36] rmarkdown_1.14   stringi_1.4.3    compiler_3.6.1   pillar_1.4.2     backports_1.1.4  methods_3.6.1    pkgconfig_2.0.2</code></pre>
+<p>If you want to run the code locally, you can copy and paste code chunks to your commands line. Make sure though that your system and packages versions are the same or more recent than the ones listed above.</p>
+</div>
+<div id="running-the-script-locally" class="section level2">
+<h2>Running the script locally</h2>
+<p>You can download the R markdown file used to generate this page as so:</p>
+<pre class="r"><code>download.file(&quot;https://raw.githubusercontent.com/viparc/prophylactic/master/analysis.Rmd&quot;, &quot;prophylactic.Rmd&quot;)</code></pre>
+<p>You can transforme this R markdown document in an R script as so:</p>
+<pre class="r"><code>if (!require(&quot;kintr&quot;)) install.packages(&quot;knitr&quot;)
+knitr::purl(&quot;prophylactic.Rmd&quot;)
+script &lt;- readLines(&quot;prophylactic.R&quot;)
+writeLines(script[-(seq_len(which(grepl(&quot;starts here&quot;, script))),
+                    which(grepl(&quot;ends here&quot;, script)):length(script))],
+           &quot;prophylactic.R&quot;)</code></pre>
 </div>
 
 
