@@ -32,7 +32,7 @@ title wherever you want to display the reference list.
 }
 </style>
 
-```{r general_options, include = FALSE}
+```{r general options, include = FALSE}
 knitr::knit_hooks$set(
   margin = function(before, options, envir) {
     if (before) par(mgp = c(1.5, .5, 0), bty = "n", plt = c(.105, .97, .13, .97))
@@ -70,7 +70,7 @@ library(magrittr)
 
 ```{r}
 viparc <- readr::read_csv("https://raw.githubusercontent.com/viparc/clires_data/master/data/viparc.csv",
-                          col_types = paste(c("cii", rep("l", 6), rep("d", 45), "lil"), collapse = ""))
+                          col_types = paste(c("ciilli", rep("l", 6), rep("d", 45)), collapse = ""))
 ```
 
 ## Transforming the AMU into qualitative information
