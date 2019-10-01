@@ -415,7 +415,7 @@ title wherever you want to display the reference list.
 &gt; viparc %&gt;%
 +   dplyr::mutate_at(dplyr::vars(dplyr::ends_with(&quot;_g&quot;)), list(~ . &gt; 0)) %&gt;%
 +   dplyr::rename_at(dplyr::vars(dplyr::ends_with(&quot;_g&quot;)), function(x) sub(&quot;_g$&quot;, &quot;_use&quot;, x)) %&gt;% 
-+   dplyr::select(-completed, -nb_chicken, -sampling) %&gt;% 
++   dplyr::select(-completed, -sampling) %&gt;% 
 +   write.csv(&quot;data/viparc_qualitative.csv&quot;, FALSE, row.names = FALSE)</code></pre>
 </div>
 
