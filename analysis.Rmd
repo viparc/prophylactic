@@ -89,7 +89,7 @@ the strategy outlined in **Figure 1**:
 
 * `prophylactic(df, clinical_signs, antimicrobials, lcs, lam)` computes a
   boolean variable expressing whether any given week of the data `df` can be
-  including in the analysis or not. This is based on the filtering process
+  included in the analysis or not. This is based on the filtering process
   explained in **figure 1** and considering the `clinical_signs` set of clinical
   signs over the `lcs` weeks before week *w* (including week *w*) and the
   `antimicrobials` set of antimicrobials over `lam` weeks before week *w*
@@ -153,9 +153,16 @@ library(magrittr)
 
 ## Loading the data
 
-```{r}
+```{r eval = FALSE}
 viparc <- readr::read_csv("https://raw.githubusercontent.com/viparc/prophylactic/master/data/viparc_qualitative.csv",
-                          col_types = paste(c("cii", rep("l", 51)), collapse = ""))
+                          col_types = paste(c("ciii", rep("l", 51)), collapse = "")) %>% 
+  dplyr::select(-nb_chicken)
+```
+
+```{r eval = TRUE, include = FALSE}
+viparc <- readr::read_csv("data/viparc_qualitative.csv",
+                          col_types = paste(c("ciii", rep("l", 51)), collapse = "")) %>% 
+  dplyr::select(-nb_chicken)
 ```
 
 We have 3 types of variables in this data frame:
@@ -206,8 +213,9 @@ lapply(0:2, lagging, df = viparc, var = am_set) %>%
   dplyr::select(farm, flock, week, dplyr::matches("colistin|oxytetracycline"))
 ```
 
-It works as expected. Now we can define the `prophylactic()` function that uses
-the above-defined `lagging()` function:
+It works as expected (note that we could have used the `dplyr::lag()` function
+too). Now we can define the `prophylactic()` function that uses the
+above-defined `lagging()` function:
 
 ```{r}
 prophylactic <- function(df, clinical_signs, antimicrobials, lcs, lam) {

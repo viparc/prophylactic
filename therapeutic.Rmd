@@ -1,0 +1,306 @@
+---
+title: "The effect of AMU therapeutic use"
+output:
+  html_document:
+    theme: cerulean
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{css horizontal scrolling, echo = FALSE}
+pre, code {white-space:pre !important; overflow-x:scroll !important}
+
+html { overflow-x: scroll; }
+```
+
+```{r general options, include = FALSE}
+knitr::knit_hooks$set(
+  margin = function(before, options, envir) {
+    if (before) par(mgp = c(1.5, .5, 0), bty = "n", plt = c(.105, .97, .13, .97))
+    else NULL
+  },
+  prompt = function(before, options, envir) {
+    options(prompt = if (options$engine %in% c("sh", "bash")) "$ " else "> ")
+  })
+
+knitr::opts_chunk$set(cache = FALSE, autodep = TRUE, message = FALSE, warning = FALSE,
+                      dev.args = list(pointsize = 11), fig.height = 3.5,
+                      fig.width = 4.24725, fig.retina = 2, fig.align = "center")
+
+options(width = 137)
+```
+
+## Packages
+
+Installing the required packages:
+
+```{r}
+required <- c("dplyr", "magrittr", "purrr", "readr")
+to_install <- setdiff(required, row.names(installed.packages()))
+if (length(to_install)) install.packages(to_install)
+```
+
+Loading `magrittr` for interactive use:
+
+```{r}
+library(magrittr)
+```
+
+## Loading the data
+
+```{r eval = FALSE}
+viparc <- readr::read_csv("https://raw.githubusercontent.com/viparc/prophylactic/master/data/viparc_qualitative.csv",
+                          col_types = paste(c("ciii", rep("l", 51)), collapse = ""))
+```
+
+```{r eval = TRUE, include = FALSE}
+viparc <- readr::read_csv("data/viparc_qualitative.csv",
+                          col_types = paste(c("ciii", rep("l", 51)), collapse = ""))
+```
+
+We have 3 types of variables in this data frame:
+
+* week ID with the variables `farm`, `flock` and `week`;
+* presence of clinical signs with the variables `respiratory`, `diarrhoea`,
+  `cns`, `malaise`, `leg_lesions` and `sudden_death`;
+* AMU (presence / absence too) with the `r ncol(viparc) - 9` variables
+  `amoxicillin_use` to `unknown_use`.
+
+For the purpose of the examples used below, we will used the following sets of
+antimicrobials and clinical signs:
+
+```{r}
+am_set <- c("colistin_use", "oxytetracycline_use")
+cs_set <- c("malaise", "diarrhoea")
+gap <- 1
+```
+
+## Preparing the data
+
+The function `fill_gaps()` takes a vector of logicals (or zeros and ones) and
+replaces all the `1 0 1` sequences by `1 1 1` (when `gap = 1`), or all `1 0 0 1`
+sequences by `1 1 1 1` (when `gap = 2`), etc...:
+
+```{r}
+fill_gaps_0 <- function(x, gap) {
+  as.integer(x) %>%         # because easier to deal with 1-character encoding
+    paste(collapse = "") %>% 
+    gsub(paste(c(1, rep(0, gap), 1), collapse = ""),
+         paste(rep(1, gap + 2), collapse = ""), .) %>% 
+    gsub("NA", "x", .) %>%  # need to replace potential NA by 1-character...
+    strsplit("") %>%        # ... because of the strsplit() call that follows
+    unlist(FALSE) %>%       # because strsplit() returns a list
+    sub("x", NA, .) %>%     # back to NA
+    as.numeric() %>% 
+    as.logical()
+}
+```
+
+Let's try it:
+
+```{r}
+fill_gaps_0(c(TRUE, TRUE, FALSE, FALSE, TRUE, FALSE, FALSE, TRUE, TRUE, TRUE, FALSE, FALSE), 2)
+```
+
+Works fine but it doesn't replace the gaps that are shorter than the `gap`
+argument:
+
+```{r}
+fill_gaps_0(c(TRUE, TRUE, FALSE, TRUE, TRUE, FALSE, FALSE, TRUE, TRUE, TRUE, FALSE, FALSE), 2)
+```
+
+`fill_gaps()` is a wrapper around `fill_gaps_0()` that fixes this problem:
+
+```{r}
+fill_gaps <- function(x, gap) {
+  while(gap > 0) {
+    x <- fill_gaps_0(x, gap)
+    gap <- gap - 1
+  }
+  x
+}
+```
+
+Let's try it:
+
+```{r}
+fill_gaps(c(TRUE, TRUE, FALSE, FALSE, TRUE, FALSE, FALSE, TRUE, TRUE, TRUE, FALSE, FALSE), 2)
+```
+
+and:
+
+```{r}
+fill_gaps(c(TRUE, TRUE, FALSE, TRUE, TRUE, FALSE, FALSE, TRUE, TRUE, TRUE, FALSE, FALSE), 2)
+```
+
+The function `episodes()` identifies the different disease episodes. It would
+for example transform `1 1 1 0 0 1 1 0 0 0 1 0` into `1 1 1 0 0 2 2 0 0 0 3 0`:
+
+```{r}
+episodes <- function(x) {
+  x <- rle(x)
+  sel <- which(x$values > 0)
+  x$values[sel] <- seq_along(sel)
+  inverse.rle(x)
+}
+```
+
+Let's try it:
+
+```{r}
+episodes(c(1, 1, 1, 0, 0, 1, 1, 0, 0, 0, 1, 0))
+```
+
+The function `split_by_disease_episode()` uses the function `episodes()` to
+generate, **for a given flock**, disease episodes according to a set of clinical
+signs `cs`, and splits by row the data frame into a list of data frames, each
+corresponding to a disease episode:
+
+```{r}
+split_by_disease_episode <- function(df, cs, gap) {
+  if (any(unique(diff(df$week))) != 1) return(NULL) # makes sure there is no missing week
+  df %>% 
+    dplyr::mutate(disease = dplyr::select(., !! cs) %>%
+                              rowSums() %>%
+                              as.logical() %>%
+                              fill_gaps(gap) %>% 
+                              as.integer() %>%
+                              episodes()) %>% 
+    dplyr::filter(disease > 0) %>% 
+    split(., .$disease) %>% 
+    lapply(dplyr::select, -disease)
+}
+```
+
+Let's try it:
+
+```{r}
+viparc %>% 
+  dplyr::filter(farm == "75-004", flock == 1) %>% 
+  dplyr::arrange(week) %>% 
+  split_by_disease_episode(cs_set, gap) %>% 
+  lapply(dplyr::select, farm, flock, week, !! cs_set) # for simpler printing
+```
+
+Works for one given cycle. Here is how we make it works for all cycles:
+
+```{r}
+a <- viparc %>% 
+  dplyr::arrange(week) %>% 
+  dplyr::group_by(farm, flock) %>% 
+  dplyr::group_map(~ split_by_disease_episode(.x, cs_set, gap), keep = TRUE) %>% 
+  unlist(FALSE)
+```
+
+which gives:
+
+```{r}
+a %>% 
+  lapply(dplyr::select, farm, flock, week, !! cs_set) %>%
+  head()
+```
+
+Before we continue, we want to exclude from this list all the disease episodes
+with AMU during the $x$ weeks before the start of the episode, AMU being, again,
+defined by a set of antimicrobials.
+
+```{r}
+exclude_if_amu_before <- function(df, x, df_ref, ab) {
+  require(magrittr)
+  first_week <- min(df$week)
+  if (first_week == 1) return(df)
+  weeks <- (first_week - x):(first_week - 1)
+  weeks <- weeks[weeks > 0]
+  amu_before_episode <- df_ref %>% 
+    dplyr::filter(farm == df$farm[1], flock == df$flock[1], week %in% weeks) %>% 
+    dplyr::select(ab) %>% 
+    rowSums() %>% 
+    as.logical() %>% 
+    any()
+  if (amu_before_episode) return(NULL)
+  df
+}
+```
+
+where `df` is a sub data frame of the `viparc` data frame, `x` is the duration,
+in weeks, of the period before the start of the disease episode we consider to
+filter out according to AMU, `df_ref` is typically the `viparc` data frame, and
+`ab` is a set of antimicrobials used to define AMU. Let's try it:
+
+```{r}
+exclude_if_amu_before(a[[1]], 2, viparc, am_set)
+```
+
+The function `before_after()` below splits the data frame of a disease episode
+into 2 data frames, one before the use of AMU and one after the use of AMU. The
+week where AMU starts is deleted. AMU is defined in terms of a set of
+antimicrobials.
+
+```{r}
+before_after <- function(df, ab) {
+  require(magrittr)
+  start <- df %>%
+    dplyr::select(ab) %>%
+    rowSums() %>%
+    as.logical() %>%
+    which() %>%
+    head(1)
+  if (length(start) < 1) return(list(df, NULL)) # there is never AMU
+  if (start < 3) return(list(NULL, df[-(1:start), ])) # AMU starts on any of the first 2 weeks
+  nr <- nrow(df)
+  if (start > nr - 2) return(list(df[-(start:nr), ], NULL)) # AMU starts on any of the last 2 weeks
+  list(df[1:(start - 1)], df[(start + 1):nr, ])
+}
+```
+
+Note that we need at least 2 weeks to be able to calculate a mortality rate.
+That's why we consider the cases where AMU starts during the first two weeks or
+the last two weeks of the episode. Let's try it:
+
+```{r}
+b <- lapply(a, before_after, am_set)
+```
+
+Finally, since the mortality rate can be calculated only if we have at least 2
+consecutive weeks, we need to exclude all the disease episodes that have only 1
+week.
+
+```{r}
+remove_short_episodes <- function(lst) {
+  lst[sapply(lst, nrow) > 1]
+} 
+```
+
+A pipeline that assembles the above defined `split_by_disease_episode()`,
+`exclude_if_amu_before()`, `before_after()` and `remove_short_episdoes()`
+functions:
+
+```{r}
+c <- viparc %>% 
+  dplyr::arrange(week) %>% 
+  dplyr::group_by(farm, flock) %>% 
+  dplyr::group_map(~ split_by_disease_episode(.x, cs_set, gap), keep = TRUE) %>% 
+  unlist(FALSE) %>% 
+  lapply(exclude_if_amu_before, 2, viparc, am_set) %>% 
+  purrr::compact() %>% # because exclude_if_amu_before() potentially generates NULL elements
+  lapply(before_after, am_set) %>% 
+  purrr::transpose() %>%
+  lapply(purrr::compact) %>%  # because before_after() potentially generates NULL elements
+  lapply(remove_short_episodes) %>% 
+  setNames(c("before", "after"))
+```
+
+Which here gives:
+
+```{r}
+sapply(c, length)
+```
+
+## Computing mortality rates
+
+The mortality rate is computed
+
