@@ -70,7 +70,7 @@ library(magrittr)
 
 ```{r}
 viparc <- readr::read_csv("https://raw.githubusercontent.com/viparc/clires_data/master/data/viparc.csv",
-                          col_types = paste(c("ciilli", rep("l", 6), "ii", rep("d", 45)), collapse = ""))
+                          col_types = paste(c("ciillidd", rep("l", 6), rep("d", 45)), collapse = ""))
 ```
 
 ## Transforming the AMU into qualitative information
