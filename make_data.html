@@ -406,7 +406,7 @@ title wherever you want to display the reference list.
 <div id="loading-the-data-viparc-data" class="section level2">
 <h2>Loading the data ViParc data</h2>
 <pre class="r"><code>&gt; viparc &lt;- readr::read_csv(&quot;https://raw.githubusercontent.com/viparc/clires_data/master/data/viparc.csv&quot;,
-+                           col_types = paste(c(&quot;ciilli&quot;, rep(&quot;l&quot;, 6), rep(&quot;d&quot;, 45)), collapse = &quot;&quot;))</code></pre>
++                           col_types = paste(c(&quot;ciilli&quot;, rep(&quot;l&quot;, 6), &quot;ii&quot;, rep(&quot;d&quot;, 45)), collapse = &quot;&quot;))</code></pre>
 </div>
 <div id="transforming-the-amu-into-qualitative-information" class="section level2">
 <h2>Transforming the AMU into qualitative information</h2>
