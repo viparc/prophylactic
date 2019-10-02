@@ -34,6 +34,69 @@ knitr::opts_chunk$set(cache = FALSE, autodep = TRUE, message = FALSE, warning = 
 options(width = 137)
 ```
 
+## Sketch out of the analysis
+
+As for the analysis of the
+[prophylactic AMU](https://viparc.github.io/prophylactic/analysis.html), the
+main difficulty here consists in rearranging the data. Once the the data is
+properly rearranged, then the analysis is pretty classical. In this section we
+sketch out the rationale of our analysis.
+
+Because we are interested in therapeutic AMU, we will consider in this analysis
+only weeks that are from **disease episodes**. A first challenge will thus
+consist in characterizing disease episodes in terms of a set of clinical signs
+and also in terms of `gap` (see the functions `fill_gaps()` and
+`split_by_disease_episode()` below).
+
+Once this is done, the next step consists in splitting each disease episode into
+2 periods: one before AMU (defined by a set of antimicrobials) and one after AMU.
+The exact week where AMU starts is excluded from the analysis. For some disease
+episodes there might be no AMU at all. On the contrary, for some other disease
+episodes, there might be AMU from the beginning of the episode. In those cases,
+we will have only a `before` or an `after` period. Also, because we really want
+to ascertain that our AMU can be considered as therapeutic, will exclude from
+the analysis all the disease episodes that had AMU during the `x` weeks before
+the start of the episode. This is what is done by the function
+`exclude_if_amu_before()` defined below.
+
+Once this is done, we end up with two arms of weeks: one `before` and one `after`
+AMU. We can then estimate and compare the mortality rates in these two arms with
+a logistic regression as detailed below. The great advantage of a logistic
+regression is that it allows to include covariables in order to control for
+potential confounding effects. For the purpose of the examples below, we will
+use the following sets of clinical signs to define disease episodes:
+
+```{r}
+cs_set <- c("malaise", "diarrhoea")
+```
+
+with this value of `gap`:
+
+```{r}
+gap <- 1
+```
+
+and the following set of antimicrobials to defined AMU:
+
+```{r}
+am_set <- c("colistin_use", "oxytetracycline_use")
+```
+
+and the following value of `x`:
+
+```{r}
+x <- 1
+```
+
+but the function `prepare_data()` at the end is a pipeline that puts everything
+together, with `cs_set`, `am_set`, `gap` and `x` as tuning parameters. The last
+section shows the different ways (basically with and without correcting for
+potential condounding effects) to performed the statistical analysis. The user
+can thus prepare a number of different data sets, depending the values of the
+`cs_set`, `am_set`, `gap` and `x` arguments and, on each of these data sets, 
+perform a number of analyses depending on whether (s)he wants to correct for
+potential confounding effects, and which ones.
+
 ## Packages
 
 Installing the required packages:
@@ -54,30 +117,22 @@ library(magrittr)
 
 ```{r eval = FALSE}
 viparc <- readr::read_csv("https://raw.githubusercontent.com/viparc/prophylactic/master/data/viparc_qualitative.csv",
-                          col_types = paste(c("ciii", rep("l", 51)), collapse = ""))
+                          col_types = paste(c("ciiidd", rep("l", 51)), collapse = ""))
 ```
 
 ```{r eval = TRUE, include = FALSE}
 viparc <- readr::read_csv("data/viparc_qualitative.csv",
-                          col_types = paste(c("ciii", rep("l", 51)), collapse = ""))
+                          col_types = paste(c("ciiidd", rep("l", 51)), collapse = ""))
 ```
 
-We have 3 types of variables in this data frame:
+We have 4 types of variables in this data frame:
 
 * week ID with the variables `farm`, `flock` and `week`;
+* chicken demography data with the variables `nb_chicken`, `chicken_disease_death` and `chicken_sudden_death`;
 * presence of clinical signs with the variables `respiratory`, `diarrhoea`,
   `cns`, `malaise`, `leg_lesions` and `sudden_death`;
-* AMU (presence / absence too) with the `r ncol(viparc) - 9` variables
+* AMU (presence / absence too) with the `r ncol(viparc) - 12` variables
   `amoxicillin_use` to `unknown_use`.
-
-For the purpose of the examples used below, we will used the following sets of
-antimicrobials and clinical signs:
-
-```{r}
-am_set <- c("colistin_use", "oxytetracycline_use")
-cs_set <- c("malaise", "diarrhoea")
-gap <- 1
-```
 
 ## Preparing the data
 
@@ -253,7 +308,7 @@ before_after <- function(df, ab) {
   if (start < 3) return(list(NULL, df[-(1:start), ])) # AMU starts on any of the first 2 weeks
   nr <- nrow(df)
   if (start > nr - 2) return(list(df[-(start:nr), ], NULL)) # AMU starts on any of the last 2 weeks
-  list(df[1:(start - 1)], df[(start + 1):nr, ])
+  list(df[1:(start - 1), ], df[(start + 1):nr, ])
 }
 ```
 
@@ -277,30 +332,94 @@ remove_short_episodes <- function(lst) {
 
 A pipeline that assembles the above defined `split_by_disease_episode()`,
 `exclude_if_amu_before()`, `before_after()` and `remove_short_episdoes()`
-functions:
+functions in order to prepare the data for analysis:
 
 ```{r}
-c <- viparc %>% 
-  dplyr::arrange(week) %>% 
-  dplyr::group_by(farm, flock) %>% 
-  dplyr::group_map(~ split_by_disease_episode(.x, cs_set, gap), keep = TRUE) %>% 
-  unlist(FALSE) %>% 
-  lapply(exclude_if_amu_before, 2, viparc, am_set) %>% 
-  purrr::compact() %>% # because exclude_if_amu_before() potentially generates NULL elements
-  lapply(before_after, am_set) %>% 
-  purrr::transpose() %>%
-  lapply(purrr::compact) %>%  # because before_after() potentially generates NULL elements
-  lapply(remove_short_episodes) %>% 
-  setNames(c("before", "after"))
+prepare_data <- function(df, cs, am, gap, x) {
+  require(magrittr)
+  df %>% 
+    dplyr::arrange(week) %>% 
+    dplyr::group_by(farm, flock) %>% 
+    dplyr::group_map(~ split_by_disease_episode(.x, cs, gap), keep = TRUE) %>% 
+    unlist(FALSE) %>%
+    lapply(exclude_if_amu_before, x, viparc, am) %>% 
+    purrr::compact() %>% # because exclude_if_amu_before() potentially generates NULL elements
+    lapply(before_after, am_set) %>% 
+    purrr::transpose() %>%
+    lapply(purrr::compact) %>% # because before_after() potentially generates NULL elements
+    lapply(remove_short_episodes) %>% 
+    setNames(c("before", "after")) %>% 
+    lapply(dplyr::bind_rows) %>% 
+    dplyr::bind_rows(.id = "arm")
+}
 ```
 
-Which here gives:
+Let's try it (takes a few seconds to run):
 
 ```{r}
-sapply(c, length)
+viparc2 <- prepare_data(viparc,
+                        c("malaise", "diarrhoea"),
+                        c("colistin_use", "oxytetracycline_use"), 1, 2)
 ```
 
-## Computing mortality rates
+In this particular case, it produces the following numbers of weeks in the two
+arms:
 
-The mortality rate is computed
+```{r}
+table(viparc2$arm)
+```
 
+## Comparing mortality rates
+
+Once the data is properly put in shape, the actual statistical analysis is quite
+classical. Here, we consider a logistic regression:
+
+```{r}
+(mod <- glm(matrix(c(chicken_disease_death + chicken_sudden_death, nb_chicken), ncol = 2) ~ arm, binomial, viparc2))
+```
+
+Note that, in this model, if you wish to correct for potential counfounding
+effects such as chicken age or the use of other antimicrobials or the presence
+of other clinical signs or AMU during the first stages of the flock, you will
+have to include the corresponding variables in the formala of the model, making
+sure that the `arm` variable is the last one. You can explore the model summary:
+
+```{r}
+summary(mod)
+```
+
+An see the significativity of the therapeutic AMU:
+
+```{r}
+anova(mod, test = "LRT")
+```
+
+In absence of any covariable (age of the flock, etc...), you can also compute
+the death rates for the two arms (`before` and `after`) straightforwardly thanks
+to the following function:
+
+```{r}
+death_rate <- function(m) {
+  require(magrittr)
+  m %>% 
+    predict.glm(se.fit = TRUE) %>% 
+    lapply(unique) %>%
+    head(2) %>% 
+    purrr::transpose() %>% 
+    lapply(function(x) c(x$fit, x$fit + c(-1, 1) * 1.96 * x$se.fit)) %>% 
+    lapply(m$family$linkinv) %>% 
+    setNames(c("before", "after")) %>% 
+    lapply(function(x) setNames(as.data.frame(t(x)), c("estimate", "lower", "upper"))) %>% 
+    dplyr::bind_rows(.id = "arm")
+}
+```
+
+Let's try it:
+
+```{r}
+death_rate(mod)
+```
+
+These "rates" are the individual probability of death per week. There may be the
+possibility to compute similar things accounting for covariates but I need to do
+some research on that.

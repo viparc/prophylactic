@@ -1513,6 +1513,21 @@ pre, code {white-space:pre !important; overflow-x:scroll !important}
 
 html { overflow-x: scroll; }
 </style>
+<div id="sketch-out-of-the-analysis" class="section level2">
+<h2>Sketch out of the analysis</h2>
+<p>As for the analysis of the <a href="https://viparc.github.io/prophylactic/analysis.html">prophylactic AMU</a>, the main difficulty here consists in rearranging the data. Once the the data is properly rearranged, then the analysis is pretty classical. In this section we sketch out the rationale of our analysis.</p>
+<p>Because we are interested in therapeutic AMU, we will consider in this analysis only weeks that are from <strong>disease episodes</strong>. A first challenge will thus consist in characterizing disease episodes in terms of a set of clinical signs and also in terms of <code>gap</code> (see the functions <code>fill_gaps()</code> and <code>split_by_disease_episode()</code> below).</p>
+<p>Once this is done, the next step consists in splitting each disease episode into 2 periods: one before AMU (defined by a set of antimicrobials) and one after AMU. The exact week where AMU starts is excluded from the analysis. For some disease episodes there might be no AMU at all. On the contrary, for some other disease episodes, there might be AMU from the beginning of the episode. In those cases, we will have only a <code>before</code> or an <code>after</code> period. Also, because we really want to ascertain that our AMU can be considered as therapeutic, will exclude from the analysis all the disease episodes that had AMU during the <code>x</code> weeks before the start of the episode. This is what is done by the function <code>exclude_if_amu_before()</code> defined below.</p>
+<p>Once this is done, we end up with two arms of weeks: one <code>before</code> and one <code>after</code> AMU. We can then estimate and compare the mortality rates in these two arms with a logistic regression as detailed below. The great advantage of a logistic regression is that it allows to include covariables in order to control for potential confounding effects. For the purpose of the examples below, we will use the following sets of clinical signs to define disease episodes:</p>
+<pre class="r"><code>cs_set &lt;- c(&quot;malaise&quot;, &quot;diarrhoea&quot;)</code></pre>
+<p>with this value of <code>gap</code>:</p>
+<pre class="r"><code>gap &lt;- 1</code></pre>
+<p>and the following set of antimicrobials to defined AMU:</p>
+<pre class="r"><code>am_set &lt;- c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)</code></pre>
+<p>and the following value of <code>x</code>:</p>
+<pre class="r"><code>x &lt;- 1</code></pre>
+<p>but the function <code>prepare_data()</code> at the end is a pipeline that puts everything together, with <code>cs_set</code>, <code>am_set</code>, <code>gap</code> and <code>x</code> as tuning parameters. The last section shows the different ways (basically with and without correcting for potential condounding effects) to performed the statistical analysis. The user can thus prepare a number of different data sets, depending the values of the <code>cs_set</code>, <code>am_set</code>, <code>gap</code> and <code>x</code> arguments and, on each of these data sets, perform a number of analyses depending on whether (s)he wants to correct for potential confounding effects, and which ones.</p>
+</div>
 <div id="packages" class="section level2">
 <h2>Packages</h2>
 <p>Installing the required packages:</p>
@@ -1525,17 +1540,14 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 <div id="loading-the-data" class="section level2">
 <h2>Loading the data</h2>
 <pre class="r"><code>viparc &lt;- readr::read_csv(&quot;https://raw.githubusercontent.com/viparc/prophylactic/master/data/viparc_qualitative.csv&quot;,
-                          col_types = paste(c(&quot;ciii&quot;, rep(&quot;l&quot;, 51)), collapse = &quot;&quot;))</code></pre>
-<p>We have 3 types of variables in this data frame:</p>
+                          col_types = paste(c(&quot;ciiidd&quot;, rep(&quot;l&quot;, 51)), collapse = &quot;&quot;))</code></pre>
+<p>We have 4 types of variables in this data frame:</p>
 <ul>
 <li>week ID with the variables <code>farm</code>, <code>flock</code> and <code>week</code>;</li>
+<li>chicken demography data with the variables <code>nb_chicken</code>, <code>chicken_disease_death</code> and <code>chicken_sudden_death</code>;</li>
 <li>presence of clinical signs with the variables <code>respiratory</code>, <code>diarrhoea</code>, <code>cns</code>, <code>malaise</code>, <code>leg_lesions</code> and <code>sudden_death</code>;</li>
-<li>AMU (presence / absence too) with the 46 variables <code>amoxicillin_use</code> to <code>unknown_use</code>.</li>
+<li>AMU (presence / absence too) with the 45 variables <code>amoxicillin_use</code> to <code>unknown_use</code>.</li>
 </ul>
-<p>For the purpose of the examples used below, we will used the following sets of antimicrobials and clinical signs:</p>
-<pre class="r"><code>am_set &lt;- c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;)
-cs_set &lt;- c(&quot;malaise&quot;, &quot;diarrhoea&quot;)
-gap &lt;- 1</code></pre>
 </div>
 <div id="preparing-the-data" class="section level2">
 <h2>Preparing the data</h2>
@@ -1681,19 +1693,19 @@ gap &lt;- 1</code></pre>
 }</code></pre>
 <p>where <code>df</code> is a sub data frame of the <code>viparc</code> data frame, <code>x</code> is the duration, in weeks, of the period before the start of the disease episode we consider to filter out according to AMU, <code>df_ref</code> is typically the <code>viparc</code> data frame, and <code>ab</code> is a set of antimicrobials used to define AMU. Let’s try it:</p>
 <pre class="r"><code>exclude_if_amu_before(a[[1]], 2, viparc, am_set)</code></pre>
-<pre><code>## # A tibble: 3 x 55
-##   farm  flock  week nb_chicken respiratory diarrhoea cns   malaise leg_lesions sudden_death amoxicillin_use ampicillin_use apramycin_use
-##   &lt;chr&gt; &lt;int&gt; &lt;int&gt;      &lt;int&gt; &lt;lgl&gt;       &lt;lgl&gt;     &lt;lgl&gt; &lt;lgl&gt;   &lt;lgl&gt;       &lt;lgl&gt;        &lt;lgl&gt;           &lt;lgl&gt;          &lt;lgl&gt;        
-## 1 75-0…     6     1        195 FALSE       FALSE     FALSE TRUE    FALSE       FALSE        FALSE           FALSE          FALSE        
-## 2 75-0…     6     2        195 FALSE       FALSE     FALSE FALSE   FALSE       FALSE        FALSE           FALSE          FALSE        
-## 3 75-0…     6     3        190 FALSE       FALSE     FALSE TRUE    FALSE       FALSE        FALSE           FALSE          FALSE        
-## # … with 42 more variables: cefadroxil_use &lt;lgl&gt;, cefotaxime_use &lt;lgl&gt;, ceftiofur_use &lt;lgl&gt;, cephalexin_use &lt;lgl&gt;,
-## #   chloramphenicol_use &lt;lgl&gt;, ciprofloxacin_use &lt;lgl&gt;, colistin_use &lt;lgl&gt;, doxycycline_use &lt;lgl&gt;, enramycin_use &lt;lgl&gt;,
-## #   enrofloxacin_use &lt;lgl&gt;, erythromycin_use &lt;lgl&gt;, florfenicol_use &lt;lgl&gt;, flumequine_use &lt;lgl&gt;, gentamicin_use &lt;lgl&gt;,
-## #   josamycin_use &lt;lgl&gt;, kitasamycin_use &lt;lgl&gt;, lincomycin_use &lt;lgl&gt;, marbofloxacin_use &lt;lgl&gt;, methenamine_use &lt;lgl&gt;,
-## #   neomycin_use &lt;lgl&gt;, norfloxacin_use &lt;lgl&gt;, oxytetracycline_use &lt;lgl&gt;, spectinomycin_use &lt;lgl&gt;, spiramycin_use &lt;lgl&gt;,
-## #   streptomycin_use &lt;lgl&gt;, sulfachloropyridazine_use &lt;lgl&gt;, sulfadiazine_use &lt;lgl&gt;, sulfadimethoxine_use &lt;lgl&gt;,
-## #   sulfadimidine_use &lt;lgl&gt;, sulfaguanidin_use &lt;lgl&gt;, sulfamethazine_use &lt;lgl&gt;, sulfamethoxazole_use &lt;lgl&gt;,
+<pre><code>## # A tibble: 3 x 57
+##   farm  flock  week nb_chicken chicken_disease… chicken_sudden_… respiratory diarrhoea cns   malaise leg_lesions sudden_death
+##   &lt;chr&gt; &lt;int&gt; &lt;int&gt;      &lt;int&gt;            &lt;dbl&gt;            &lt;dbl&gt; &lt;lgl&gt;       &lt;lgl&gt;     &lt;lgl&gt; &lt;lgl&gt;   &lt;lgl&gt;       &lt;lgl&gt;       
+## 1 75-0…     6     1        195                9                0 FALSE       FALSE     FALSE TRUE    FALSE       FALSE       
+## 2 75-0…     6     2        195                0                0 FALSE       FALSE     FALSE FALSE   FALSE       FALSE       
+## 3 75-0…     6     3        190                5                0 FALSE       FALSE     FALSE TRUE    FALSE       FALSE       
+## # … with 45 more variables: amoxicillin_use &lt;lgl&gt;, ampicillin_use &lt;lgl&gt;, apramycin_use &lt;lgl&gt;, cefadroxil_use &lt;lgl&gt;,
+## #   cefotaxime_use &lt;lgl&gt;, ceftiofur_use &lt;lgl&gt;, cephalexin_use &lt;lgl&gt;, chloramphenicol_use &lt;lgl&gt;, ciprofloxacin_use &lt;lgl&gt;,
+## #   colistin_use &lt;lgl&gt;, doxycycline_use &lt;lgl&gt;, enramycin_use &lt;lgl&gt;, enrofloxacin_use &lt;lgl&gt;, erythromycin_use &lt;lgl&gt;,
+## #   florfenicol_use &lt;lgl&gt;, flumequine_use &lt;lgl&gt;, gentamicin_use &lt;lgl&gt;, josamycin_use &lt;lgl&gt;, kitasamycin_use &lt;lgl&gt;, lincomycin_use &lt;lgl&gt;,
+## #   marbofloxacin_use &lt;lgl&gt;, methenamine_use &lt;lgl&gt;, neomycin_use &lt;lgl&gt;, norfloxacin_use &lt;lgl&gt;, oxytetracycline_use &lt;lgl&gt;,
+## #   spectinomycin_use &lt;lgl&gt;, spiramycin_use &lt;lgl&gt;, streptomycin_use &lt;lgl&gt;, sulfachloropyridazine_use &lt;lgl&gt;, sulfadiazine_use &lt;lgl&gt;,
+## #   sulfadimethoxine_use &lt;lgl&gt;, sulfadimidine_use &lt;lgl&gt;, sulfaguanidin_use &lt;lgl&gt;, sulfamethazine_use &lt;lgl&gt;, sulfamethoxazole_use &lt;lgl&gt;,
 ## #   sulfamethoxypyridazine_use &lt;lgl&gt;, sulphamethoxazole_use &lt;lgl&gt;, sulphathiazole_use &lt;lgl&gt;, tetracycline_use &lt;lgl&gt;,
 ## #   thiamphenicol_use &lt;lgl&gt;, tiamulin_use &lt;lgl&gt;, tilmicosin_use &lt;lgl&gt;, trimethoprim_use &lt;lgl&gt;, tylosin_use &lt;lgl&gt;, unknown_use &lt;lgl&gt;</code></pre>
 <p>The function <code>before_after()</code> below splits the data frame of a disease episode into 2 data frames, one before the use of AMU and one after the use of AMU. The week where AMU starts is deleted. AMU is defined in terms of a set of antimicrobials.</p>
@@ -1709,7 +1721,7 @@ gap &lt;- 1</code></pre>
   if (start &lt; 3) return(list(NULL, df[-(1:start), ])) # AMU starts on any of the first 2 weeks
   nr &lt;- nrow(df)
   if (start &gt; nr - 2) return(list(df[-(start:nr), ], NULL)) # AMU starts on any of the last 2 weeks
-  list(df[1:(start - 1)], df[(start + 1):nr, ])
+  list(df[1:(start - 1), ], df[(start + 1):nr, ])
 }</code></pre>
 <p>Note that we need at least 2 weeks to be able to calculate a mortality rate. That’s why we consider the cases where AMU starts during the first two weeks or the last two weeks of the episode. Let’s try it:</p>
 <pre class="r"><code>b &lt;- lapply(a, before_after, am_set)</code></pre>
@@ -1717,27 +1729,110 @@ gap &lt;- 1</code></pre>
 <pre class="r"><code>remove_short_episodes &lt;- function(lst) {
   lst[sapply(lst, nrow) &gt; 1]
 } </code></pre>
-<p>A pipeline that assembles the above defined <code>split_by_disease_episode()</code>, <code>exclude_if_amu_before()</code>, <code>before_after()</code> and <code>remove_short_episdoes()</code> functions:</p>
-<pre class="r"><code>c &lt;- viparc %&gt;% 
-  dplyr::arrange(week) %&gt;% 
-  dplyr::group_by(farm, flock) %&gt;% 
-  dplyr::group_map(~ split_by_disease_episode(.x, cs_set, gap), keep = TRUE) %&gt;% 
-  unlist(FALSE) %&gt;% 
-  lapply(exclude_if_amu_before, 2, viparc, am_set) %&gt;% 
-  purrr::compact() %&gt;% # because exclude_if_amu_before() potentially generates NULL elements
-  lapply(before_after, am_set) %&gt;% 
-  purrr::transpose() %&gt;%
-  lapply(purrr::compact) %&gt;%  # because before_after() potentially generates NULL elements
-  lapply(remove_short_episodes) %&gt;% 
-  setNames(c(&quot;before&quot;, &quot;after&quot;))</code></pre>
-<p>Which here gives:</p>
-<pre class="r"><code>sapply(c, length)</code></pre>
-<pre><code>## before  after 
-##    114     66</code></pre>
+<p>A pipeline that assembles the above defined <code>split_by_disease_episode()</code>, <code>exclude_if_amu_before()</code>, <code>before_after()</code> and <code>remove_short_episdoes()</code> functions in order to prepare the data for analysis:</p>
+<pre class="r"><code>prepare_data &lt;- function(df, cs, am, gap, x) {
+  require(magrittr)
+  df %&gt;% 
+    dplyr::arrange(week) %&gt;% 
+    dplyr::group_by(farm, flock) %&gt;% 
+    dplyr::group_map(~ split_by_disease_episode(.x, cs, gap), keep = TRUE) %&gt;% 
+    unlist(FALSE) %&gt;%
+    lapply(exclude_if_amu_before, x, viparc, am) %&gt;% 
+    purrr::compact() %&gt;% # because exclude_if_amu_before() potentially generates NULL elements
+    lapply(before_after, am_set) %&gt;% 
+    purrr::transpose() %&gt;%
+    lapply(purrr::compact) %&gt;% # because before_after() potentially generates NULL elements
+    lapply(remove_short_episodes) %&gt;% 
+    setNames(c(&quot;before&quot;, &quot;after&quot;)) %&gt;% 
+    lapply(dplyr::bind_rows) %&gt;% 
+    dplyr::bind_rows(.id = &quot;arm&quot;)
+}</code></pre>
+<p>Let’s try it (takes a few seconds to run):</p>
+<pre class="r"><code>viparc2 &lt;- prepare_data(viparc,
+                        c(&quot;malaise&quot;, &quot;diarrhoea&quot;),
+                        c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;), 1, 2)</code></pre>
+<p>In this particular case, it produces the following numbers of weeks in the two arms:</p>
+<pre class="r"><code>table(viparc2$arm)</code></pre>
+<pre><code>## 
+##  after before 
+##    329    344</code></pre>
 </div>
-<div id="computing-mortality-rates" class="section level2">
-<h2>Computing mortality rates</h2>
-<p>The mortality rate is computed</p>
+<div id="comparing-mortality-rates" class="section level2">
+<h2>Comparing mortality rates</h2>
+<p>Once the data is properly put in shape, the actual statistical analysis is quite classical. Here, we consider a logistic regression:</p>
+<pre class="r"><code>(mod &lt;- glm(matrix(c(chicken_disease_death + chicken_sudden_death, nb_chicken), ncol = 2) ~ arm, binomial, viparc2))</code></pre>
+<pre><code>## 
+## Call:  glm(formula = matrix(c(chicken_disease_death + chicken_sudden_death, 
+##     nb_chicken), ncol = 2) ~ arm, family = binomial, data = viparc2)
+## 
+## Coefficients:
+## (Intercept)    armbefore  
+##     -3.4953       0.8669  
+## 
+## Degrees of Freedom: 672 Total (i.e. Null);  671 Residual
+## Null Deviance:       34530 
+## Residual Deviance: 32460     AIC: 34720</code></pre>
+<p>Note that, in this model, if you wish to correct for potential counfounding effects such as chicken age or the use of other antimicrobials or the presence of other clinical signs or AMU during the first stages of the flock, you will have to include the corresponding variables in the formala of the model, making sure that the <code>arm</code> variable is the last one. You can explore the model summary:</p>
+<pre class="r"><code>summary(mod)</code></pre>
+<pre><code>## 
+## Call:
+## glm(formula = matrix(c(chicken_disease_death + chicken_sudden_death, 
+##     nb_chicken), ncol = 2) ~ arm, family = binomial, data = viparc2)
+## 
+## Deviance Residuals: 
+##     Min       1Q   Median       3Q      Max  
+## -14.571   -4.714   -2.447    0.563   39.831  
+## 
+## Coefficients:
+##             Estimate Std. Error z value Pr(&gt;|z|)    
+## (Intercept) -3.49531    0.01623 -215.42   &lt;2e-16 ***
+## armbefore    0.86694    0.01976   43.88   &lt;2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## (Dispersion parameter for binomial family taken to be 1)
+## 
+##     Null deviance: 34533  on 672  degrees of freedom
+## Residual deviance: 32463  on 671  degrees of freedom
+## AIC: 34724
+## 
+## Number of Fisher Scoring iterations: 5</code></pre>
+<p>An see the significativity of the therapeutic AMU:</p>
+<pre class="r"><code>anova(mod, test = &quot;LRT&quot;)</code></pre>
+<pre><code>## Analysis of Deviance Table
+## 
+## Model: binomial, link: logit
+## 
+## Response: matrix(c(chicken_disease_death + chicken_sudden_death, nb_chicken), ncol = 2)
+## 
+## Terms added sequentially (first to last)
+## 
+## 
+##      Df Deviance Resid. Df Resid. Dev  Pr(&gt;Chi)    
+## NULL                   672      34533              
+## arm   1   2070.7       671      32463 &lt; 2.2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
+<p>In absence of any covariable (age of the flock, etc…), you can also compute the death rates for the two arms (<code>before</code> and <code>after</code>) straightforwardly thanks to the following function:</p>
+<pre class="r"><code>death_rate &lt;- function(m) {
+  require(magrittr)
+  m %&gt;% 
+    predict.glm(se.fit = TRUE) %&gt;% 
+    lapply(unique) %&gt;%
+    head(2) %&gt;% 
+    purrr::transpose() %&gt;% 
+    lapply(function(x) c(x$fit, x$fit + c(-1, 1) * 1.96 * x$se.fit)) %&gt;% 
+    lapply(m$family$linkinv) %&gt;% 
+    setNames(c(&quot;before&quot;, &quot;after&quot;)) %&gt;% 
+    lapply(function(x) setNames(as.data.frame(t(x)), c(&quot;estimate&quot;, &quot;lower&quot;, &quot;upper&quot;))) %&gt;% 
+    dplyr::bind_rows(.id = &quot;arm&quot;)
+}</code></pre>
+<p>Let’s try it:</p>
+<pre class="r"><code>death_rate(mod)</code></pre>
+<pre><code>##      arm   estimate      lower      upper
+## 1 before 0.06733469 0.06596056 0.06873535
+## 2  after 0.02944607 0.02855066 0.03036868</code></pre>
+<p>These “rates” are the individual probability of death per week. There may be the possibility to compute similar things accounting for covariates but I need to do some research on that.</p>
 </div>
 
 
