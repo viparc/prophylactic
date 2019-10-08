@@ -155,14 +155,14 @@ library(magrittr)
 
 ```{r eval = FALSE}
 viparc <- readr::read_csv("https://raw.githubusercontent.com/viparc/prophylactic/master/data/viparc_qualitative.csv",
-                          col_types = paste(c("ciii", rep("l", 51)), collapse = "")) %>% 
-  dplyr::select(-nb_chicken)
+                          col_types = paste(c("ciiidd", rep("l", 51)), collapse = "")) %>% 
+  dplyr::select(-nb_chicken, -chicken_disease_death, -chicken_sudden_death)
 ```
 
 ```{r eval = TRUE, include = FALSE}
 viparc <- readr::read_csv("data/viparc_qualitative.csv",
-                          col_types = paste(c("ciii", rep("l", 51)), collapse = "")) %>% 
-  dplyr::select(-nb_chicken)
+                          col_types = paste(c("ciiidd", rep("l", 51)), collapse = "")) %>% 
+  dplyr::select(-nb_chicken, -chicken_disease_death, -chicken_sudden_death)
 ```
 
 We have 3 types of variables in this data frame:

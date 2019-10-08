@@ -1554,8 +1554,8 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 <div id="loading-the-data" class="section level2">
 <h2>Loading the data</h2>
 <pre class="r"><code>viparc &lt;- readr::read_csv(&quot;https://raw.githubusercontent.com/viparc/prophylactic/master/data/viparc_qualitative.csv&quot;,
-                          col_types = paste(c(&quot;ciii&quot;, rep(&quot;l&quot;, 51)), collapse = &quot;&quot;)) %&gt;% 
-  dplyr::select(-nb_chicken)</code></pre>
+                          col_types = paste(c(&quot;ciiidd&quot;, rep(&quot;l&quot;, 51)), collapse = &quot;&quot;)) %&gt;% 
+  dplyr::select(-nb_chicken, -chicken_disease_death, -chicken_sudden_death)</code></pre>
 <p>We have 3 types of variables in this data frame:</p>
 <ul>
 <li>week ID with the variables <code>farm</code>, <code>flock</code> and <code>week</code>;</li>
