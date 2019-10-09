@@ -978,12 +978,22 @@ develop(simplify(tmp))
 
 ### Generating tables
 
+Let's download the data on the antimicrobials classes:
+
 ```{r}
 ab_classes <- readr::read_csv("https://raw.githubusercontent.com/viparc/clires_data/master/data/antimicrobial_classes.csv", col_types = "cc")
 ab_classes$antimicrobial <- paste0(ab_classes$antimicrobial, "_use")
 ```
 
-This takes 10'-15' to run:
+It looks like this:
+
+```{r}
+ab_classes
+```
+
+We can use the `run_plan()` function to compute odds ratios across
+antimicrobials classes, clinical signs and values 1 to 3 for the durations in
+weeks of the initial, filtering and watching periods (it takes 10'-15' to run):
 
 ```{r eval = FALSE}
 tmp <- run_plan(pipeline6, viparc, filtering = 1:3, watching = 1:3,
@@ -995,6 +1005,10 @@ tmp <- run_plan(pipeline6, viparc, filtering = 1:3, watching = 1:3,
   dplyr::rename(class = antimicrobials)
 ```
 
+We can the split this output by the durations of the initial, filtering and
+watching periods, and spread the data to show antimicrobials classes in rows and
+clinical signs in columns:
+
 ```{r eval = FALSE}
 tmp %>% 
   dplyr::mutate(or = log(or)) %>% 
@@ -1004,7 +1018,6 @@ tmp %>%
            dplyr::select(clinical_signs, class, or) %>% 
            tidyr::pivot_wider(names_from = clinical_signs, values_from = or))
 ```
-
 
 ## Session info
 
