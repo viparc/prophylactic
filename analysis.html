@@ -1545,9 +1545,14 @@ html { overflow-x: scroll; }
 <div id="packages" class="section level2">
 <h2>Packages</h2>
 <p>Installing the required packages:</p>
-<pre class="r"><code>required &lt;- c(&quot;dplyr&quot;, &quot;magrittr&quot;, &quot;purrr&quot;, &quot;readr&quot;)
-to_install &lt;- setdiff(required, row.names(installed.packages()))
-if (length(to_install)) install.packages(to_install)</code></pre>
+<pre class="r"><code>installed_packages &lt;- row.names(installed.packages())
+required &lt;- c(&quot;dplyr&quot;, &quot;magrittr&quot;, &quot;mgcv&quot;, &quot;purrr&quot;, &quot;readr&quot;)
+to_install &lt;- setdiff(required, installed_packages)
+if (length(to_install)) install.packages(to_install)
+if (length(setdiff(&quot;mgcv.helper&quot;, installed_packages))) {
+  if (length(setdiff(&quot;remotes&quot;, installed_packages))) install.packages(&quot;remotes&quot;)
+  remotes::install_github(&quot;choisy/mgcv.helper&quot;)
+}</code></pre>
 <p>Loading <code>magrittr</code> for interactive use:</p>
 <pre class="r"><code>library(magrittr)</code></pre>
 </div>
@@ -2484,7 +2489,7 @@ cs_set &lt;- c(&quot;malaise&quot;, &quot;diarrhoea&quot;)</code></pre>
     dplyr::filter(prophylactic(., clinical_signs_filtering, antimicrobials_filtering, lcs, lam)) %&gt;% 
     dplyr::select(farm, flock, week, amu_first_weeks, amu_observation, amu, disease) %&gt;% 
     na.exclude() %&gt;% 
-    mgcv::gam(disease ~ amu_first_weeks + amu_observation + s(week) + amu, binomial, .)
+    mgcv::gam(disease ~ amu_first_weeks + amu_observation + s(week) + amu, binomial, ., method = &quot;REML&quot;)
 }</code></pre>
 <p>And the wrapper with the simple interface:</p>
 <pre class="r"><code>pipeline6 &lt;- function(df, clinical_signs = NULL, antimicrobials = NULL, filtering, watching, first_wks)
@@ -2500,22 +2505,22 @@ cs_set &lt;- c(&quot;malaise&quot;, &quot;diarrhoea&quot;)</code></pre>
 ## disease ~ amu_first_weeks + amu_observation + s(week) + amu
 ## 
 ## Parametric coefficients:
-##                       Estimate Std. Error z value Pr(&gt;|z|)    
-## (Intercept)         -1.859e+00  1.300e-01 -14.306  &lt; 2e-16 ***
-## amu_first_weeksTRUE -3.540e-01  1.519e-01  -2.331   0.0198 *  
-## amu_observationTRUE  1.244e+00  1.622e-01   7.673 1.68e-14 ***
-## amuTRUE              4.612e-05  2.213e-01   0.000   0.9998    
+##                     Estimate Std. Error z value Pr(&gt;|z|)    
+## (Intercept)         -1.86077    0.13006 -14.307  &lt; 2e-16 ***
+## amu_first_weeksTRUE -0.35715    0.15206  -2.349   0.0188 *  
+## amu_observationTRUE  1.24355    0.16230   7.662 1.83e-14 ***
+## amuTRUE              0.01794    0.22197   0.081   0.9356    
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
 ## 
 ## Approximate significance of smooth terms:
 ##           edf Ref.df Chi.sq p-value    
-## s(week) 3.773  4.653  109.5  &lt;2e-16 ***
+## s(week) 4.097  5.021  111.1  &lt;2e-16 ***
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
 ## 
-## R-sq.(adj) =  0.147   Deviance explained = 16.4%
-## UBRE = -0.22685  Scale est. = 1         n = 1790</code></pre>
+## R-sq.(adj) =  0.147   Deviance explained = 16.5%
+## -REML = 695.09  Scale est. = 1         n = 1790</code></pre>
 </div>
 </div>
 <div id="end" class="section level2">
@@ -2530,11 +2535,13 @@ cs_set &lt;- c(&quot;malaise&quot;, &quot;diarrhoea&quot;)</code></pre>
 <pre class="r"><code>get_outputs.glm &lt;- function(x) {
   data &lt;- x$model
   m &lt;- with(data, table(amu, disease))
+  conf_int &lt;- confint(x)
   list(n    = nrow(data),
        ct   = addmargins(m),
        prob = round(sweep(m, 1, rowSums(m), &quot;/&quot;), 2),
        or   = exp(tail(coef(x), 1)),
-       p    = tail(anova(x, test = &quot;LRT&quot;)$`Pr(&gt;Chi)`, 1))
+       p    = tail(anova(x, test = &quot;LRT&quot;)$`Pr(&gt;Chi)`, 1),
+       ci   = conf_int[nrow(conf_int), ])
 }</code></pre>
 <p>Let’s try it:</p>
 <pre class="r"><code>get_outputs(pipeline4(viparc, filtering = 2, watching = 2, first_wks = 1))</code></pre>
@@ -2559,7 +2566,11 @@ cs_set &lt;- c(&quot;malaise&quot;, &quot;diarrhoea&quot;)</code></pre>
 ## 0.65976 
 ## 
 ## $p
-## [1] 0.04569518</code></pre>
+## [1] 0.04569518
+## 
+## $ci
+##        2.5 %       97.5 % 
+## -0.835762763 -0.007863199</code></pre>
 <p>Let’s now define a batch of durations values:</p>
 <pre class="r"><code>(batch &lt;- expand.grid(filtering = 1:2, watching = 1:2, first_wks = 1:2))</code></pre>
 <pre><code>##   filtering watching first_wks
@@ -2600,6 +2611,10 @@ cs_set &lt;- c(&quot;malaise&quot;, &quot;diarrhoea&quot;)</code></pre>
 ## [[1]]$p
 ## [1] 0.2482423
 ## 
+## [[1]]$ci
+##      2.5 %     97.5 % 
+## -0.6039546  0.1509620 
+## 
 ## 
 ## [[2]]
 ## [[2]]$n
@@ -2623,20 +2638,26 @@ cs_set &lt;- c(&quot;malaise&quot;, &quot;diarrhoea&quot;)</code></pre>
 ## 0.7962257 
 ## 
 ## [[2]]$p
-## [1] 0.3487159</code></pre>
+## [1] 0.3487159
+## 
+## [[2]]$ci
+##      2.5 %     97.5 % 
+## -0.7178204  0.2446093</code></pre>
 </div>
 <div id="with-gam" class="section level3">
 <h3>With GAM</h3>
 <p>Let’s now define a <code>gam</code> method for the <code>get_outputs()</code> generic:</p>
-<pre class="r"><code>get_outputs.gam &lt;- function(x) {
+<pre class="r"><code>get_outputs.gam &lt;- function(x, level = .95) {
   data &lt;- x$model
   m &lt;- with(data, table(amu, disease))
   summ &lt;- summary(x)
+  conf_int &lt;- mgcv.helper::confint.gam(x, level = level)
   list(n    = nrow(data),
        ct   = addmargins(m),
        prob = round(sweep(m, 1, rowSums(m), &quot;/&quot;), 2),
-       or   = unname(exp(tail(summ$p.coef, 1))),
-       p    = unname(tail(summ$p.pv, 1)))
+       or   = unname(tail(summ$p.coef, 1)),
+       p    = unname(tail(summ$p.pv, 1)),
+       ci   = unlist(conf_int[nrow(conf_int), 5:6]))
 }</code></pre>
 <p>Let’s try it:</p>
 <pre class="r"><code>get_outputs(pipeline6(viparc, filtering = 2, watching = 2, first_wks = 1))</code></pre>
@@ -2657,10 +2678,14 @@ cs_set &lt;- c(&quot;malaise&quot;, &quot;diarrhoea&quot;)</code></pre>
 ##   TRUE   0.70 0.30
 ## 
 ## $or
-## [1] 1.000046
+## [1] 0.0179444
 ## 
 ## $p
-## [1] 0.9998338</code></pre>
+## [1] 0.935568
+## 
+## $ci
+##       2.5%      97.5% 
+## -0.4174045  0.4532934</code></pre>
 <p>Let’s now run it on a batch of durations values, and put the output in shape:</p>
 <pre class="r"><code>batch %&gt;% 
   tibble::as_tibble() %&gt;%
@@ -2671,19 +2696,22 @@ cs_set &lt;- c(&quot;malaise&quot;, &quot;diarrhoea&quot;)</code></pre>
   tibble::as_tibble() %&gt;% 
   dplyr::mutate_at(c(&quot;n&quot;, &quot;or&quot;, &quot;p&quot;), unlist) %&gt;% 
   dplyr::bind_cols(plan, .) # intermediate value re-used here</code></pre>
-<pre><code>## # A tibble: 8 x 8
-##   filtering watching first_wks     n ct      prob       or     p
-##       &lt;int&gt;    &lt;int&gt;     &lt;int&gt; &lt;int&gt; &lt;list&gt;  &lt;list&gt;  &lt;dbl&gt; &lt;dbl&gt;
-## 1         1        1         1  2657 &lt;table&gt; &lt;table&gt; 1.03  0.888
-## 2         2        1         1  2023 &lt;table&gt; &lt;table&gt; 1.25  0.377
-## 3         1        2         1  2398 &lt;table&gt; &lt;table&gt; 0.807 0.212
-## 4         2        2         1  1790 &lt;table&gt; &lt;table&gt; 1.00  1.000
-## 5         1        1         2  2657 &lt;table&gt; &lt;table&gt; 1.06  0.753
-## 6         2        1         2  2023 &lt;table&gt; &lt;table&gt; 1.35  0.231
-## 7         1        2         2  2398 &lt;table&gt; &lt;table&gt; 0.836 0.293
-## 8         2        2         2  1790 &lt;table&gt; &lt;table&gt; 1.06  0.796</code></pre>
+<pre><code>## # A tibble: 8 x 9
+##   filtering watching first_wks     n ct      prob         or     p ci       
+##       &lt;int&gt;    &lt;int&gt;     &lt;int&gt; &lt;int&gt; &lt;list&gt;  &lt;list&gt;    &lt;dbl&gt; &lt;dbl&gt; &lt;list&gt;   
+## 1         1        1         1  2657 &lt;table&gt; &lt;table&gt;  0.0357 0.855 &lt;dbl [2]&gt;
+## 2         2        1         1  2023 &lt;table&gt; &lt;table&gt;  0.236  0.350 &lt;dbl [2]&gt;
+## 3         1        2         1  2398 &lt;table&gt; &lt;table&gt; -0.205  0.232 &lt;dbl [2]&gt;
+## 4         2        2         1  1790 &lt;table&gt; &lt;table&gt;  0.0179 0.936 &lt;dbl [2]&gt;
+## 5         1        1         2  2657 &lt;table&gt; &lt;table&gt;  0.0692 0.723 &lt;dbl [2]&gt;
+## 6         2        1         2  2023 &lt;table&gt; &lt;table&gt;  0.313  0.211 &lt;dbl [2]&gt;
+## 7         1        2         2  2398 &lt;table&gt; &lt;table&gt; -0.171  0.318 &lt;dbl [2]&gt;
+## 8         2        2         2  1790 &lt;table&gt; &lt;table&gt;  0.0741 0.737 &lt;dbl [2]&gt;</code></pre>
+</div>
+<div id="a-function-to-run-a-pipeline-on-several-values-of-the-tuning-parameters" class="section level3">
+<h3>A function to run a pipeline on several values of the tuning parameters</h3>
 <p>Let’s make a function out of this above code:</p>
-<pre class="r"><code>run_plan &lt;- function(f, df, clinical_signs = NULL, antimicrobials = NULL, filtering = 1, watching = 1, first_wks = 1) {
+<pre class="r"><code>run_plan &lt;- function(f, df, clinical_signs = NULL, antimicrobials = NULL, filtering = 1, watching = 1, first_wks = 1, nb_cores = 1) {
   require(magrittr)
   
   var_names &lt;- setdiff(names(df), c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;))
@@ -2692,18 +2720,26 @@ cs_set &lt;- c(&quot;malaise&quot;, &quot;diarrhoea&quot;)</code></pre>
   if (is.null(clinical_signs)) clinical_signs &lt;- list(grep(&quot;_use$&quot;, var_names, value = TRUE, invert = TRUE))
   else if (! is.list(clinical_signs)) clinical_signs &lt;- list(clinical_signs)
   
+  run &lt;- function(x) {
+    if (nb_cores &lt; 2) return(purrr::pmap(x, f, df = df))
+    c(FUN = f, x, MoreArgs = list(list(df = df)), SIMPLIFY = FALSE, mc.cores = nb_cores) %&gt;% 
+        do.call(parallel::mcmapply, .)
+  }
+  
   environment() %&gt;% 
     as.list() %&gt;% 
-    `[&lt;-`(c(&quot;f&quot;, &quot;df&quot;, &quot;var_names&quot;), NULL) %&gt;% 
+    `[&lt;-`(c(&quot;f&quot;, &quot;df&quot;, &quot;var_names&quot;, &quot;run&quot;, &quot;nb_cores&quot;), NULL) %&gt;% 
     expand.grid() %&gt;% 
-    tibble::as_tibble() %&gt;%
     assign(&quot;plan&quot;, ., 1) %&gt;% # saving intermediate value
-    purrr::pmap(f, df = df) %&gt;%
+    run() %&gt;% 
     lapply(get_outputs) %&gt;%
     purrr::transpose() %&gt;%
     tibble::as_tibble() %&gt;%
     dplyr::mutate_at(c(&quot;n&quot;, &quot;or&quot;, &quot;p&quot;), unlist) %&gt;%
-    dplyr::bind_cols(plan, .) # reusing the intermediate value
+    dplyr::bind_cols(tibble::as_tibble(plan), .) %&gt;% # reusing the intermediate value
+    dplyr::mutate(lower = unlist(lapply(ci, head, 1)),
+                  upper = unlist(lapply(ci, tail, 1))) %&gt;% 
+    dplyr::select(-ci)
 }</code></pre>
 <p>Let’s also write two functions that will help the exploration of the outputs of the <code>run_plan()</code> function. The first one develops the list of clinical signs and / or antimicrobials so that they can easily be read in the data frame:</p>
 <pre class="r"><code>develop &lt;- function(df, var = NULL) {
@@ -2720,17 +2756,17 @@ cs_set &lt;- c(&quot;malaise&quot;, &quot;diarrhoea&quot;)</code></pre>
 }</code></pre>
 <p>Let’s now try these three functions. With default values:</p>
 <pre class="r"><code>run_plan(pipeline6, viparc)</code></pre>
-<pre><code>## # A tibble: 1 x 10
-##   clinical_signs antimicrobials filtering watching first_wks     n ct      prob       or     p
-##   &lt;list&gt;         &lt;list&gt;             &lt;dbl&gt;    &lt;dbl&gt;     &lt;dbl&gt; &lt;int&gt; &lt;list&gt;  &lt;list&gt;  &lt;dbl&gt; &lt;dbl&gt;
-## 1 &lt;chr [6]&gt;      &lt;chr [45]&gt;             1        1         1  2657 &lt;table&gt; &lt;table&gt;  1.03 0.888</code></pre>
+<pre><code>## # A tibble: 1 x 12
+##   clinical_signs antimicrobials filtering watching first_wks     n ct      prob        or     p  lower upper
+##   &lt;list&gt;         &lt;list&gt;             &lt;dbl&gt;    &lt;dbl&gt;     &lt;dbl&gt; &lt;int&gt; &lt;list&gt;  &lt;list&gt;   &lt;dbl&gt; &lt;dbl&gt;  &lt;dbl&gt; &lt;dbl&gt;
+## 1 &lt;chr [6]&gt;      &lt;chr [45]&gt;             1        1         1  2657 &lt;table&gt; &lt;table&gt; 0.0357 0.855 -0.348 0.420</code></pre>
 <p>By default, the set of all clinical signs and the set of all antimicrobials are considered, and the durations of the begining of the flock, the filtering period, and the observation period are fixed to 1 week. This can be changed by assigning values to the arguments of the <code>run_plan()</code> function. For example, considering 2 different durations of the filtering period:</p>
 <pre class="r"><code>(tmp &lt;- run_plan(pipeline6, viparc, filtering = 1:2))</code></pre>
-<pre><code>## # A tibble: 2 x 10
-##   clinical_signs antimicrobials filtering watching first_wks     n ct      prob       or     p
-##   &lt;list&gt;         &lt;list&gt;             &lt;int&gt;    &lt;dbl&gt;     &lt;dbl&gt; &lt;int&gt; &lt;list&gt;  &lt;list&gt;  &lt;dbl&gt; &lt;dbl&gt;
-## 1 &lt;chr [6]&gt;      &lt;chr [45]&gt;             1        1         1  2657 &lt;table&gt; &lt;table&gt;  1.03 0.888
-## 2 &lt;chr [6]&gt;      &lt;chr [45]&gt;             2        1         1  2023 &lt;table&gt; &lt;table&gt;  1.25 0.377</code></pre>
+<pre><code>## # A tibble: 2 x 12
+##   clinical_signs antimicrobials filtering watching first_wks     n ct      prob        or     p  lower upper
+##   &lt;list&gt;         &lt;list&gt;             &lt;int&gt;    &lt;dbl&gt;     &lt;dbl&gt; &lt;int&gt; &lt;list&gt;  &lt;list&gt;   &lt;dbl&gt; &lt;dbl&gt;  &lt;dbl&gt; &lt;dbl&gt;
+## 1 &lt;chr [6]&gt;      &lt;chr [45]&gt;             1        1         1  2657 &lt;table&gt; &lt;table&gt; 0.0357 0.855 -0.348 0.420
+## 2 &lt;chr [6]&gt;      &lt;chr [45]&gt;             2        1         1  2023 &lt;table&gt; &lt;table&gt; 0.236  0.350 -0.259 0.731</code></pre>
 <p>Note that you can access the contingency tables this way:</p>
 <pre class="r"><code>tmp$ct</code></pre>
 <pre><code>## [[1]]
@@ -2761,78 +2797,78 @@ cs_set &lt;- c(&quot;malaise&quot;, &quot;diarrhoea&quot;)</code></pre>
 ##   TRUE   0.80 0.20</code></pre>
 <p>and same thing for the list of clinical signs and antimicrobials. If you want to see only the columns for which values change:</p>
 <pre class="r"><code>simplify(tmp)</code></pre>
-<pre><code>## # A tibble: 2 x 6
-##   filtering     n ct      prob       or     p
-##       &lt;int&gt; &lt;int&gt; &lt;list&gt;  &lt;list&gt;  &lt;dbl&gt; &lt;dbl&gt;
-## 1         1  2657 &lt;table&gt; &lt;table&gt;  1.03 0.888
-## 2         2  2023 &lt;table&gt; &lt;table&gt;  1.25 0.377</code></pre>
+<pre><code>## # A tibble: 2 x 8
+##   filtering     n ct      prob        or     p  lower upper
+##       &lt;int&gt; &lt;int&gt; &lt;list&gt;  &lt;list&gt;   &lt;dbl&gt; &lt;dbl&gt;  &lt;dbl&gt; &lt;dbl&gt;
+## 1         1  2657 &lt;table&gt; &lt;table&gt; 0.0357 0.855 -0.348 0.420
+## 2         2  2023 &lt;table&gt; &lt;table&gt; 0.236  0.350 -0.259 0.731</code></pre>
 <p>Let’s see a more complex example:</p>
 <pre class="r"><code>(tmp &lt;- run_plan(pipeline6, viparc, filtering = 1:2, watching = 1:2,
                  antimicrobials = list(&quot;colistin_use&quot;, c(&quot;colistin_use&quot;, &quot;cefotaxime_use&quot;)),
                  clinical_signs = &quot;respiratory&quot;, first_wks = 1))</code></pre>
-<pre><code>## # A tibble: 8 x 10
-##   clinical_signs antimicrobials filtering watching first_wks     n ct      prob       or     p
-##   &lt;list&gt;         &lt;list&gt;             &lt;int&gt;    &lt;int&gt;     &lt;dbl&gt; &lt;int&gt; &lt;list&gt;  &lt;list&gt;  &lt;dbl&gt; &lt;dbl&gt;
-## 1 &lt;chr [1]&gt;      &lt;chr [1]&gt;              1        1         1  4370 &lt;table&gt; &lt;table&gt; 0.770 0.517
-## 2 &lt;chr [1]&gt;      &lt;chr [2]&gt;              1        1         1  4369 &lt;table&gt; &lt;table&gt; 0.769 0.514
-## 3 &lt;chr [1]&gt;      &lt;chr [1]&gt;              2        1         1  3909 &lt;table&gt; &lt;table&gt; 0.737 0.537
-## 4 &lt;chr [1]&gt;      &lt;chr [2]&gt;              2        1         1  3907 &lt;table&gt; &lt;table&gt; 0.737 0.537
-## 5 &lt;chr [1]&gt;      &lt;chr [1]&gt;              1        2         1  4065 &lt;table&gt; &lt;table&gt; 0.875 0.650
-## 6 &lt;chr [1]&gt;      &lt;chr [2]&gt;              1        2         1  4064 &lt;table&gt; &lt;table&gt; 0.873 0.644
-## 7 &lt;chr [1]&gt;      &lt;chr [1]&gt;              2        2         1  3609 &lt;table&gt; &lt;table&gt; 0.903 0.764
-## 8 &lt;chr [1]&gt;      &lt;chr [2]&gt;              2        2         1  3607 &lt;table&gt; &lt;table&gt; 0.902 0.761</code></pre>
+<pre><code>## # A tibble: 8 x 12
+##   clinical_signs antimicrobials filtering watching first_wks     n ct      prob         or     p  lower upper
+##   &lt;list&gt;         &lt;list&gt;             &lt;int&gt;    &lt;int&gt;     &lt;dbl&gt; &lt;int&gt; &lt;list&gt;  &lt;list&gt;    &lt;dbl&gt; &lt;dbl&gt;  &lt;dbl&gt; &lt;dbl&gt;
+## 1 &lt;chr [1]&gt;      &lt;chr [1]&gt;              1        1         1  4370 &lt;table&gt; &lt;table&gt; -0.251  0.537 -1.05  0.545
+## 2 &lt;chr [1]&gt;      &lt;chr [2]&gt;              1        1         1  4369 &lt;table&gt; &lt;table&gt; -0.253  0.534 -1.05  0.543
+## 3 &lt;chr [1]&gt;      &lt;chr [1]&gt;              2        1         1  3909 &lt;table&gt; &lt;table&gt; -0.280  0.566 -1.24  0.677
+## 4 &lt;chr [1]&gt;      &lt;chr [2]&gt;              2        1         1  3907 &lt;table&gt; &lt;table&gt; -0.280  0.566 -1.24  0.677
+## 5 &lt;chr [1]&gt;      &lt;chr [1]&gt;              1        2         1  4065 &lt;table&gt; &lt;table&gt; -0.127  0.664 -0.700 0.446
+## 6 &lt;chr [1]&gt;      &lt;chr [2]&gt;              1        2         1  4064 &lt;table&gt; &lt;table&gt; -0.130  0.657 -0.703 0.443
+## 7 &lt;chr [1]&gt;      &lt;chr [1]&gt;              2        2         1  3609 &lt;table&gt; &lt;table&gt; -0.0904 0.789 -0.752 0.572
+## 8 &lt;chr [1]&gt;      &lt;chr [2]&gt;              2        2         1  3607 &lt;table&gt; &lt;table&gt; -0.0917 0.786 -0.754 0.570</code></pre>
 <p>This output can be visualized with the <code>simplify()</code> function:</p>
 <pre class="r"><code>simplify(tmp)</code></pre>
-<pre><code>## # A tibble: 8 x 8
-##   antimicrobials filtering watching     n ct      prob       or     p
-##   &lt;list&gt;             &lt;int&gt;    &lt;int&gt; &lt;int&gt; &lt;list&gt;  &lt;list&gt;  &lt;dbl&gt; &lt;dbl&gt;
-## 1 &lt;chr [1]&gt;              1        1  4370 &lt;table&gt; &lt;table&gt; 0.770 0.517
-## 2 &lt;chr [2]&gt;              1        1  4369 &lt;table&gt; &lt;table&gt; 0.769 0.514
-## 3 &lt;chr [1]&gt;              2        1  3909 &lt;table&gt; &lt;table&gt; 0.737 0.537
-## 4 &lt;chr [2]&gt;              2        1  3907 &lt;table&gt; &lt;table&gt; 0.737 0.537
-## 5 &lt;chr [1]&gt;              1        2  4065 &lt;table&gt; &lt;table&gt; 0.875 0.650
-## 6 &lt;chr [2]&gt;              1        2  4064 &lt;table&gt; &lt;table&gt; 0.873 0.644
-## 7 &lt;chr [1]&gt;              2        2  3609 &lt;table&gt; &lt;table&gt; 0.903 0.764
-## 8 &lt;chr [2]&gt;              2        2  3607 &lt;table&gt; &lt;table&gt; 0.902 0.761</code></pre>
+<pre><code>## # A tibble: 8 x 10
+##   antimicrobials filtering watching     n ct      prob         or     p  lower upper
+##   &lt;list&gt;             &lt;int&gt;    &lt;int&gt; &lt;int&gt; &lt;list&gt;  &lt;list&gt;    &lt;dbl&gt; &lt;dbl&gt;  &lt;dbl&gt; &lt;dbl&gt;
+## 1 &lt;chr [1]&gt;              1        1  4370 &lt;table&gt; &lt;table&gt; -0.251  0.537 -1.05  0.545
+## 2 &lt;chr [2]&gt;              1        1  4369 &lt;table&gt; &lt;table&gt; -0.253  0.534 -1.05  0.543
+## 3 &lt;chr [1]&gt;              2        1  3909 &lt;table&gt; &lt;table&gt; -0.280  0.566 -1.24  0.677
+## 4 &lt;chr [2]&gt;              2        1  3907 &lt;table&gt; &lt;table&gt; -0.280  0.566 -1.24  0.677
+## 5 &lt;chr [1]&gt;              1        2  4065 &lt;table&gt; &lt;table&gt; -0.127  0.664 -0.700 0.446
+## 6 &lt;chr [2]&gt;              1        2  4064 &lt;table&gt; &lt;table&gt; -0.130  0.657 -0.703 0.443
+## 7 &lt;chr [1]&gt;              2        2  3609 &lt;table&gt; &lt;table&gt; -0.0904 0.789 -0.752 0.572
+## 8 &lt;chr [2]&gt;              2        2  3607 &lt;table&gt; &lt;table&gt; -0.0917 0.786 -0.754 0.570</code></pre>
 <p>the <code>develop()</code> function:</p>
 <pre class="r"><code>develop(tmp)</code></pre>
-<pre><code>## # A tibble: 8 x 10
-##   clinical_signs antimicrobials               filtering watching first_wks     n ct      prob       or     p
-##   &lt;chr&gt;          &lt;chr&gt;                            &lt;int&gt;    &lt;int&gt;     &lt;dbl&gt; &lt;int&gt; &lt;list&gt;  &lt;list&gt;  &lt;dbl&gt; &lt;dbl&gt;
-## 1 respiratory    colistin_use                         1        1         1  4370 &lt;table&gt; &lt;table&gt; 0.770 0.517
-## 2 respiratory    colistin_use, cefotaxime_use         1        1         1  4369 &lt;table&gt; &lt;table&gt; 0.769 0.514
-## 3 respiratory    colistin_use                         2        1         1  3909 &lt;table&gt; &lt;table&gt; 0.737 0.537
-## 4 respiratory    colistin_use, cefotaxime_use         2        1         1  3907 &lt;table&gt; &lt;table&gt; 0.737 0.537
-## 5 respiratory    colistin_use                         1        2         1  4065 &lt;table&gt; &lt;table&gt; 0.875 0.650
-## 6 respiratory    colistin_use, cefotaxime_use         1        2         1  4064 &lt;table&gt; &lt;table&gt; 0.873 0.644
-## 7 respiratory    colistin_use                         2        2         1  3609 &lt;table&gt; &lt;table&gt; 0.903 0.764
-## 8 respiratory    colistin_use, cefotaxime_use         2        2         1  3607 &lt;table&gt; &lt;table&gt; 0.902 0.761</code></pre>
+<pre><code>## # A tibble: 8 x 12
+##   clinical_signs antimicrobials               filtering watching first_wks     n ct      prob         or     p  lower upper
+##   &lt;chr&gt;          &lt;chr&gt;                            &lt;int&gt;    &lt;int&gt;     &lt;dbl&gt; &lt;int&gt; &lt;list&gt;  &lt;list&gt;    &lt;dbl&gt; &lt;dbl&gt;  &lt;dbl&gt; &lt;dbl&gt;
+## 1 respiratory    colistin_use                         1        1         1  4370 &lt;table&gt; &lt;table&gt; -0.251  0.537 -1.05  0.545
+## 2 respiratory    colistin_use, cefotaxime_use         1        1         1  4369 &lt;table&gt; &lt;table&gt; -0.253  0.534 -1.05  0.543
+## 3 respiratory    colistin_use                         2        1         1  3909 &lt;table&gt; &lt;table&gt; -0.280  0.566 -1.24  0.677
+## 4 respiratory    colistin_use, cefotaxime_use         2        1         1  3907 &lt;table&gt; &lt;table&gt; -0.280  0.566 -1.24  0.677
+## 5 respiratory    colistin_use                         1        2         1  4065 &lt;table&gt; &lt;table&gt; -0.127  0.664 -0.700 0.446
+## 6 respiratory    colistin_use, cefotaxime_use         1        2         1  4064 &lt;table&gt; &lt;table&gt; -0.130  0.657 -0.703 0.443
+## 7 respiratory    colistin_use                         2        2         1  3609 &lt;table&gt; &lt;table&gt; -0.0904 0.789 -0.752 0.572
+## 8 respiratory    colistin_use, cefotaxime_use         2        2         1  3607 &lt;table&gt; &lt;table&gt; -0.0917 0.786 -0.754 0.570</code></pre>
 <p>or the two in combination:</p>
 <pre class="r"><code>simplify(develop(tmp))</code></pre>
-<pre><code>## # A tibble: 8 x 8
-##   antimicrobials               filtering watching     n ct      prob       or     p
-##   &lt;chr&gt;                            &lt;int&gt;    &lt;int&gt; &lt;int&gt; &lt;list&gt;  &lt;list&gt;  &lt;dbl&gt; &lt;dbl&gt;
-## 1 colistin_use                         1        1  4370 &lt;table&gt; &lt;table&gt; 0.770 0.517
-## 2 colistin_use, cefotaxime_use         1        1  4369 &lt;table&gt; &lt;table&gt; 0.769 0.514
-## 3 colistin_use                         2        1  3909 &lt;table&gt; &lt;table&gt; 0.737 0.537
-## 4 colistin_use, cefotaxime_use         2        1  3907 &lt;table&gt; &lt;table&gt; 0.737 0.537
-## 5 colistin_use                         1        2  4065 &lt;table&gt; &lt;table&gt; 0.875 0.650
-## 6 colistin_use, cefotaxime_use         1        2  4064 &lt;table&gt; &lt;table&gt; 0.873 0.644
-## 7 colistin_use                         2        2  3609 &lt;table&gt; &lt;table&gt; 0.903 0.764
-## 8 colistin_use, cefotaxime_use         2        2  3607 &lt;table&gt; &lt;table&gt; 0.902 0.761</code></pre>
+<pre><code>## # A tibble: 8 x 10
+##   antimicrobials               filtering watching     n ct      prob         or     p  lower upper
+##   &lt;chr&gt;                            &lt;int&gt;    &lt;int&gt; &lt;int&gt; &lt;list&gt;  &lt;list&gt;    &lt;dbl&gt; &lt;dbl&gt;  &lt;dbl&gt; &lt;dbl&gt;
+## 1 colistin_use                         1        1  4370 &lt;table&gt; &lt;table&gt; -0.251  0.537 -1.05  0.545
+## 2 colistin_use, cefotaxime_use         1        1  4369 &lt;table&gt; &lt;table&gt; -0.253  0.534 -1.05  0.543
+## 3 colistin_use                         2        1  3909 &lt;table&gt; &lt;table&gt; -0.280  0.566 -1.24  0.677
+## 4 colistin_use, cefotaxime_use         2        1  3907 &lt;table&gt; &lt;table&gt; -0.280  0.566 -1.24  0.677
+## 5 colistin_use                         1        2  4065 &lt;table&gt; &lt;table&gt; -0.127  0.664 -0.700 0.446
+## 6 colistin_use, cefotaxime_use         1        2  4064 &lt;table&gt; &lt;table&gt; -0.130  0.657 -0.703 0.443
+## 7 colistin_use                         2        2  3609 &lt;table&gt; &lt;table&gt; -0.0904 0.789 -0.752 0.572
+## 8 colistin_use, cefotaxime_use         2        2  3607 &lt;table&gt; &lt;table&gt; -0.0917 0.786 -0.754 0.570</code></pre>
 <p>which is equivalent to:</p>
 <pre class="r"><code>develop(simplify(tmp))</code></pre>
-<pre><code>## # A tibble: 8 x 8
-##   antimicrobials               filtering watching     n ct      prob       or     p
-##   &lt;chr&gt;                            &lt;int&gt;    &lt;int&gt; &lt;int&gt; &lt;list&gt;  &lt;list&gt;  &lt;dbl&gt; &lt;dbl&gt;
-## 1 colistin_use                         1        1  4370 &lt;table&gt; &lt;table&gt; 0.770 0.517
-## 2 colistin_use, cefotaxime_use         1        1  4369 &lt;table&gt; &lt;table&gt; 0.769 0.514
-## 3 colistin_use                         2        1  3909 &lt;table&gt; &lt;table&gt; 0.737 0.537
-## 4 colistin_use, cefotaxime_use         2        1  3907 &lt;table&gt; &lt;table&gt; 0.737 0.537
-## 5 colistin_use                         1        2  4065 &lt;table&gt; &lt;table&gt; 0.875 0.650
-## 6 colistin_use, cefotaxime_use         1        2  4064 &lt;table&gt; &lt;table&gt; 0.873 0.644
-## 7 colistin_use                         2        2  3609 &lt;table&gt; &lt;table&gt; 0.903 0.764
-## 8 colistin_use, cefotaxime_use         2        2  3607 &lt;table&gt; &lt;table&gt; 0.902 0.761</code></pre>
+<pre><code>## # A tibble: 8 x 10
+##   antimicrobials               filtering watching     n ct      prob         or     p  lower upper
+##   &lt;chr&gt;                            &lt;int&gt;    &lt;int&gt; &lt;int&gt; &lt;list&gt;  &lt;list&gt;    &lt;dbl&gt; &lt;dbl&gt;  &lt;dbl&gt; &lt;dbl&gt;
+## 1 colistin_use                         1        1  4370 &lt;table&gt; &lt;table&gt; -0.251  0.537 -1.05  0.545
+## 2 colistin_use, cefotaxime_use         1        1  4369 &lt;table&gt; &lt;table&gt; -0.253  0.534 -1.05  0.543
+## 3 colistin_use                         2        1  3909 &lt;table&gt; &lt;table&gt; -0.280  0.566 -1.24  0.677
+## 4 colistin_use, cefotaxime_use         2        1  3907 &lt;table&gt; &lt;table&gt; -0.280  0.566 -1.24  0.677
+## 5 colistin_use                         1        2  4065 &lt;table&gt; &lt;table&gt; -0.127  0.664 -0.700 0.446
+## 6 colistin_use, cefotaxime_use         1        2  4064 &lt;table&gt; &lt;table&gt; -0.130  0.657 -0.703 0.443
+## 7 colistin_use                         2        2  3609 &lt;table&gt; &lt;table&gt; -0.0904 0.789 -0.752 0.572
+## 8 colistin_use, cefotaxime_use         2        2  3607 &lt;table&gt; &lt;table&gt; -0.0917 0.786 -0.754 0.570</code></pre>
 </div>
 <div id="generating-tables" class="section level3">
 <h3>Generating tables</h3>
@@ -2855,17 +2891,19 @@ ab_classes$antimicrobial &lt;- paste0(ab_classes$antimicrobial, &quot;_use&quot;
 ##  9 enrofloxacin_use quinolones    
 ## 10 flumequine_use   quinolones    
 ## # … with 34 more rows</code></pre>
-<p>We can use the <code>run_plan()</code> function to compute odds ratios across antimicrobials classes, clinical signs and values 1 to 3 for the durations in weeks of the initial, filtering and watching periods (it takes 10’-15’ to run):</p>
+<p>We can use the <code>run_plan()</code> function to compute odds ratios across antimicrobials classes, clinical signs and values 1 to 3 for the durations in weeks of the initial, filtering and watching periods (it takes about 10’ to run on 3 cores):</p>
 <pre class="r"><code>tmp &lt;- run_plan(pipeline6, viparc, filtering = 1:3, watching = 1:3,
                 antimicrobials = split(ab_classes$antimicrobial, ab_classes$class),
                 clinical_signs = as.list(setdiff(grep(&quot;_use$&quot;, names(viparc), value = TRUE, invert = TRUE), c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;))),
-                first_wks = 1:3) %&gt;% 
+                first_wks = 1:3, nb_cores = 3) %&gt;% 
   dplyr::mutate(clinical_signs = unlist(clinical_signs),
                 antimicrobials = names(antimicrobials)) %&gt;% 
   dplyr::rename(class = antimicrobials)</code></pre>
 <p>We can the split this output by the durations of the initial, filtering and watching periods, and spread the data to show antimicrobials classes in rows and clinical signs in columns:</p>
 <pre class="r"><code>tmp %&gt;% 
-  dplyr::mutate(or = log(or)) %&gt;% 
+  dplyr::mutate(or    = exp(or),
+                lower = exp(lower),
+                upper = exp(upper)) %&gt;% 
   dplyr::group_by(filtering, watching, first_wks) %&gt;% 
   dplyr::group_split() %&gt;% 
   lapply(. %&gt;%
@@ -2892,15 +2930,16 @@ ab_classes$antimicrobial &lt;- paste0(ab_classes$antimicrobial, &quot;_use&quot;
 ## character(0)
 ## 
 ## other attached packages:
-## [1] dplyr_0.8.3  magrittr_1.5 purrr_0.3.2  readr_1.3.1 
+## [1] dplyr_0.8.3  magrittr_1.5 mgcv_1.8-28  purrr_0.3.2  readr_1.3.1 
 ## 
 ## loaded via a namespace (and not attached):
-##  [1] Rcpp_1.0.2       knitr_1.24       splines_3.6.1    hms_0.4.2        grDevices_3.6.1  tidyselect_0.2.5 lattice_0.20-38 
-##  [8] R6_2.4.0         rlang_0.4.0      fansi_0.4.0      stringr_1.4.0    tools_3.6.1      utils_3.6.1      grid_3.6.1      
-## [15] nlme_3.1-140     mgcv_1.8-28      xfun_0.8         utf8_1.1.4       cli_1.1.0        htmltools_0.3.6  stats_3.6.1     
-## [22] datasets_3.6.1   yaml_2.2.0       digest_0.6.20    assertthat_0.2.1 tibble_2.1.3     base_3.6.1       crayon_1.3.4    
-## [29] Matrix_1.2-17    graphics_3.6.1   vctrs_0.2.0      curl_4.0         zeallot_0.1.0    glue_1.3.1       evaluate_0.14   
-## [36] rmarkdown_1.14   stringi_1.4.3    compiler_3.6.1   pillar_1.4.2     backports_1.1.4  methods_3.6.1    pkgconfig_2.0.2</code></pre>
+##  [1] Rcpp_1.0.2        pillar_1.4.2      compiler_3.6.1    methods_3.6.1     utils_3.6.1       tools_3.6.1       grDevices_3.6.1  
+##  [8] zeallot_0.1.0     digest_0.6.21     evaluate_0.14     tibble_2.1.3      nlme_3.1-140      lattice_0.20-38   pkgconfig_2.0.3  
+## [15] rlang_0.4.0       Matrix_1.2-17     cli_1.1.0         curl_4.0          yaml_2.2.0        xfun_0.8          stringr_1.4.0    
+## [22] knitr_1.24        vctrs_0.2.0       graphics_3.6.1    datasets_3.6.1    stats_3.6.1       hms_0.4.2         grid_3.6.1       
+## [29] tidyselect_0.2.5  glue_1.3.1        base_3.6.1        R6_2.4.0          fansi_0.4.0       rmarkdown_1.14    mgcv.helper_0.1.8
+## [36] backports_1.1.5   htmltools_0.3.6   splines_3.6.1     MASS_7.3-51.4     assertthat_0.2.1  utf8_1.1.4        stringi_1.4.3    
+## [43] crayon_1.3.4</code></pre>
 <p>If you want to run the code locally, you can copy and paste code chunks to your commands line. Make sure though that your system and packages versions are the same or more recent than the ones listed above.</p>
 </div>
 <div id="running-the-script-locally" class="section level2">

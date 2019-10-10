@@ -140,9 +140,14 @@ the definition of the sets of antimicrobials and clinical signs to consider:
 Installing the required packages:
 
 ```{r}
-required <- c("dplyr", "magrittr", "purrr", "readr")
-to_install <- setdiff(required, row.names(installed.packages()))
+installed_packages <- row.names(installed.packages())
+required <- c("dplyr", "magrittr", "mgcv", "purrr", "readr")
+to_install <- setdiff(required, installed_packages)
 if (length(to_install)) install.packages(to_install)
+if (length(setdiff("mgcv.helper", installed_packages))) {
+  if (length(setdiff("remotes", installed_packages))) install.packages("remotes")
+  remotes::install_github("choisy/mgcv.helper")
+}
 ```
 
 Loading `magrittr` for interactive use:
@@ -756,7 +761,7 @@ pipeline5 <- function(df, clinical_signs_filtering = NULL, antimicrobials_filter
     dplyr::filter(prophylactic(., clinical_signs_filtering, antimicrobials_filtering, lcs, lam)) %>% 
     dplyr::select(farm, flock, week, amu_first_weeks, amu_observation, amu, disease) %>% 
     na.exclude() %>% 
-    mgcv::gam(disease ~ amu_first_weeks + amu_observation + s(week) + amu, binomial, .)
+    mgcv::gam(disease ~ amu_first_weeks + amu_observation + s(week) + amu, binomial, ., method = "REML")
 }
 ```
 
@@ -793,11 +798,13 @@ Let's now define a `glm` method for that generic function:
 get_outputs.glm <- function(x) {
   data <- x$model
   m <- with(data, table(amu, disease))
+  conf_int <- confint(x)
   list(n    = nrow(data),
        ct   = addmargins(m),
        prob = round(sweep(m, 1, rowSums(m), "/"), 2),
        or   = exp(tail(coef(x), 1)),
-       p    = tail(anova(x, test = "LRT")$`Pr(>Chi)`, 1))
+       p    = tail(anova(x, test = "LRT")$`Pr(>Chi)`, 1),
+       ci   = conf_int[nrow(conf_int), ])
 }
 ```
 
@@ -827,15 +834,17 @@ batch %>%
 Let's now define a `gam` method for the `get_outputs()` generic:
 
 ```{r}
-get_outputs.gam <- function(x) {
+get_outputs.gam <- function(x, level = .95) {
   data <- x$model
   m <- with(data, table(amu, disease))
   summ <- summary(x)
+  conf_int <- mgcv.helper::confint.gam(x, level = level)
   list(n    = nrow(data),
        ct   = addmargins(m),
        prob = round(sweep(m, 1, rowSums(m), "/"), 2),
-       or   = unname(exp(tail(summ$p.coef, 1))),
-       p    = unname(tail(summ$p.pv, 1)))
+       or   = unname(tail(summ$p.coef, 1)),
+       p    = unname(tail(summ$p.pv, 1)),
+       ci   = unlist(conf_int[nrow(conf_int), 5:6]))
 }
 ```
 
@@ -859,10 +868,12 @@ batch %>%
   dplyr::bind_cols(plan, .) # intermediate value re-used here
 ```
 
+### A function to run a pipeline on several values of the tuning parameters
+
 Let's make a function out of this above code:
 
 ```{r}
-run_plan <- function(f, df, clinical_signs = NULL, antimicrobials = NULL, filtering = 1, watching = 1, first_wks = 1) {
+run_plan <- function(f, df, clinical_signs = NULL, antimicrobials = NULL, filtering = 1, watching = 1, first_wks = 1, nb_cores = 1) {
   require(magrittr)
   
   var_names <- setdiff(names(df), c("farm", "flock", "week"))
@@ -871,18 +882,26 @@ run_plan <- function(f, df, clinical_signs = NULL, antimicrobials = NULL, filter
   if (is.null(clinical_signs)) clinical_signs <- list(grep("_use$", var_names, value = TRUE, invert = TRUE))
   else if (! is.list(clinical_signs)) clinical_signs <- list(clinical_signs)
   
+  run <- function(x) {
+    if (nb_cores < 2) return(purrr::pmap(x, f, df = df))
+    c(FUN = f, x, MoreArgs = list(list(df = df)), SIMPLIFY = FALSE, mc.cores = nb_cores) %>% 
+        do.call(parallel::mcmapply, .)
+  }
+  
   environment() %>% 
     as.list() %>% 
-    `[<-`(c("f", "df", "var_names"), NULL) %>% 
+    `[<-`(c("f", "df", "var_names", "run", "nb_cores"), NULL) %>% 
     expand.grid() %>% 
-    tibble::as_tibble() %>%
     assign("plan", ., 1) %>% # saving intermediate value
-    purrr::pmap(f, df = df) %>%
+    run() %>% 
     lapply(get_outputs) %>%
     purrr::transpose() %>%
     tibble::as_tibble() %>%
     dplyr::mutate_at(c("n", "or", "p"), unlist) %>%
-    dplyr::bind_cols(plan, .) # reusing the intermediate value
+    dplyr::bind_cols(tibble::as_tibble(plan), .) %>% # reusing the intermediate value
+    dplyr::mutate(lower = unlist(lapply(ci, head, 1)),
+                  upper = unlist(lapply(ci, tail, 1))) %>% 
+    dplyr::select(-ci)
 }
 ```
 
@@ -993,13 +1012,14 @@ ab_classes
 
 We can use the `run_plan()` function to compute odds ratios across
 antimicrobials classes, clinical signs and values 1 to 3 for the durations in
-weeks of the initial, filtering and watching periods (it takes 10'-15' to run):
+weeks of the initial, filtering and watching periods (it takes about 10' to run
+on 3 cores):
 
 ```{r eval = FALSE}
 tmp <- run_plan(pipeline6, viparc, filtering = 1:3, watching = 1:3,
                 antimicrobials = split(ab_classes$antimicrobial, ab_classes$class),
                 clinical_signs = as.list(setdiff(grep("_use$", names(viparc), value = TRUE, invert = TRUE), c("farm", "flock", "week"))),
-                first_wks = 1:3) %>% 
+                first_wks = 1:3, nb_cores = 3) %>% 
   dplyr::mutate(clinical_signs = unlist(clinical_signs),
                 antimicrobials = names(antimicrobials)) %>% 
   dplyr::rename(class = antimicrobials)
@@ -1011,7 +1031,9 @@ clinical signs in columns:
 
 ```{r eval = FALSE}
 tmp %>% 
-  dplyr::mutate(or = log(or)) %>% 
+  dplyr::mutate(or    = exp(or),
+                lower = exp(lower),
+                upper = exp(upper)) %>% 
   dplyr::group_by(filtering, watching, first_wks) %>% 
   dplyr::group_split() %>% 
   lapply(. %>%
