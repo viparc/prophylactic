@@ -1551,7 +1551,7 @@ to_install &lt;- setdiff(required, installed_packages)
 if (length(to_install)) install.packages(to_install)
 if (length(setdiff(&quot;mgcv.helper&quot;, installed_packages))) {
   if (length(setdiff(&quot;remotes&quot;, installed_packages))) install.packages(&quot;remotes&quot;)
-  remotes::install_github(&quot;choisy/mgcv.helper&quot;)
+  remotes::install_github(&quot;samclifford/mgcv.helper&quot;)
 }</code></pre>
 <p>Loading <code>magrittr</code> for interactive use:</p>
 <pre class="r"><code>library(magrittr)</code></pre>
