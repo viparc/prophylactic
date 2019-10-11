@@ -368,7 +368,8 @@ prepare_data <- function(df, cs, am, gap, x) {
     lapply(purrr::compact) %>% # because before_after() potentially generates NULL elements
     setNames(c("before", "after")) %>% 
     lapply(dplyr::bind_rows) %>% 
-    dplyr::bind_rows(.id = "arm")
+    dplyr::bind_rows(.id = "arm") %>% 
+    dplyr::mutate(arm = factor(arm, c("before", "after")))
 }
 ```
 
@@ -399,14 +400,29 @@ classical. Here, we consider a logistic regression:
 Note that, in this model, if you wish to correct for potential counfounding
 effects such as chicken age or the use of other antimicrobials or the presence
 of other clinical signs or AMU during the first stages of the flock, you will
-have to include the corresponding variables in the formala of the model, making
+have to include the corresponding variables in the formula of the model, making
 sure that the `arm` variable is the last one. You can explore the model summary:
 
 ```{r}
 summary(mod)
 ```
 
-An see the significativity of the therapeutic AMU:
+After AMU, the mortality rate is multiplied by the following factor:
+
+```{r}
+unname(exp(tail(coef(mod), 1)))
+```
+
+with the following confidence interval:
+
+```{r}
+mod %>% 
+  confint() %>% 
+  `[`(., nrow(.), ) %>% 
+  exp()
+```
+
+The significativity of the therapeutic AMU is:
 
 ```{r}
 anova(mod, test = "LRT")

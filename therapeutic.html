@@ -1748,7 +1748,8 @@ if (length(to_install)) install.packages(to_install)</code></pre>
     lapply(purrr::compact) %&gt;% # because before_after() potentially generates NULL elements
     setNames(c(&quot;before&quot;, &quot;after&quot;)) %&gt;% 
     lapply(dplyr::bind_rows) %&gt;% 
-    dplyr::bind_rows(.id = &quot;arm&quot;)
+    dplyr::bind_rows(.id = &quot;arm&quot;) %&gt;% 
+    dplyr::mutate(arm = factor(arm, c(&quot;before&quot;, &quot;after&quot;)))
 }</code></pre>
 <p>Let’s try it (takes a few seconds to run):</p>
 <pre class="r"><code>viparc2 &lt;- prepare_data(viparc,
@@ -1757,8 +1758,8 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 <p>In this particular case, it produces the following numbers of weeks in the two arms:</p>
 <pre class="r"><code>table(viparc2$arm)</code></pre>
 <pre><code>## 
-##  after before 
-##    353    491</code></pre>
+## before  after 
+##    491    353</code></pre>
 </div>
 <div id="comparing-mortality-rates" class="section level2">
 <h2>Comparing mortality rates</h2>
@@ -1769,13 +1770,13 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 ##     nb_chicken), ncol = 2) ~ arm, family = binomial, data = viparc2)
 ## 
 ## Coefficients:
-## (Intercept)    armbefore  
-##      -3.480        1.002  
+## (Intercept)     armafter  
+##      -2.478       -1.002  
 ## 
 ## Degrees of Freedom: 843 Total (i.e. Null);  842 Residual
 ## Null Deviance:       52410 
 ## Residual Deviance: 48890     AIC: 51770</code></pre>
-<p>Note that, in this model, if you wish to correct for potential counfounding effects such as chicken age or the use of other antimicrobials or the presence of other clinical signs or AMU during the first stages of the flock, you will have to include the corresponding variables in the formala of the model, making sure that the <code>arm</code> variable is the last one. You can explore the model summary:</p>
+<p>Note that, in this model, if you wish to correct for potential counfounding effects such as chicken age or the use of other antimicrobials or the presence of other clinical signs or AMU during the first stages of the flock, you will have to include the corresponding variables in the formula of the model, making sure that the <code>arm</code> variable is the last one. You can explore the model summary:</p>
 <pre class="r"><code>summary(mod)</code></pre>
 <pre><code>## 
 ## Call:
@@ -1787,9 +1788,9 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 ## -16.023   -4.978   -2.584    0.597   53.769  
 ## 
 ## Coefficients:
-##             Estimate Std. Error z value Pr(&gt;|z|)    
-## (Intercept) -3.47977    0.01562 -222.76   &lt;2e-16 ***
-## armbefore    1.00185    0.01803   55.56   &lt;2e-16 ***
+##              Estimate Std. Error z value Pr(&gt;|z|)    
+## (Intercept) -2.477927   0.009008 -275.09   &lt;2e-16 ***
+## armafter    -1.001848   0.018032  -55.56   &lt;2e-16 ***
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
 ## 
@@ -1800,7 +1801,17 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 ## AIC: 51768
 ## 
 ## Number of Fisher Scoring iterations: 5</code></pre>
-<p>An see the significativity of the therapeutic AMU:</p>
+<p>After AMU, the mortality rate is multiplied by the following factor:</p>
+<pre class="r"><code>unname(exp(tail(coef(mod), 1)))</code></pre>
+<pre><code>## [1] 0.3672003</code></pre>
+<p>with the following confidence interval:</p>
+<pre class="r"><code>mod %&gt;% 
+  confint() %&gt;% 
+  `[`(., nrow(.), ) %&gt;% 
+  exp()</code></pre>
+<pre><code>##     2.5 %    97.5 % 
+## 0.3544133 0.3803729</code></pre>
+<p>The significativity of the therapeutic AMU is:</p>
 <pre class="r"><code>anova(mod, test = &quot;LRT&quot;)</code></pre>
 <pre><code>## Analysis of Deviance Table
 ## 
