@@ -46,25 +46,57 @@ Because we are interested in therapeutic AMU, we will consider in this analysis
 only weeks that are from **disease episodes**. A first challenge will thus
 consist in characterizing disease episodes in terms of a set of clinical signs
 and also in terms of `gap` (see the functions `fill_gaps()` and
-`split_by_disease_episode()` below).
+`split_by_disease_episode()` below), as explained in **Figure 1** below.
+
+<div style="text-align:center"> <img src="fig therapeutic 1.png" width="600"/> </div>
+
+**Figure 1: Defining a disease episode.** The arrow represents the weeks (each
+rectangle is a week) of a flock, from the first week on the left ot the last one
+on the right. The red dots represent the presence of disease, as defined by a
+set of clinical signs (there is disease if at least one of the clinical signs of
+the set is reported). In order to account for the fact that symptoms may not be
+always reported, we want to allow the possibility to convert one or a few weeks
+without reported symptoms and surrounded by weeks with reported symptoms into
+one single disease episode. The parameter `gap` is the number of week(s) without
+symptoms we allow ourself to skip when defining a disease episode. Below the
+arrow are 3 examples of disease episodes definitions with 3 episodes when
+`gap = 0`, 2 episodes when `gap = 1` and 1 episode only when `gap = 3`.
+
 
 Once this is done, the next step consists in splitting each disease episode into
-2 periods: one before AMU (defined by a set of antimicrobials) and one after AMU.
-The exact week where AMU starts is excluded from the analysis. For some disease
-episodes there might be no AMU at all. On the contrary, for some other disease
-episodes, there might be AMU from the beginning of the episode. In those cases,
-we will have only a `before` or an `after` period. Also, because we really want
-to ascertain that our AMU can be considered as therapeutic, will exclude from
-the analysis all the disease episodes that had AMU during the `x` weeks before
-the start of the episode. This is what is done by the function
-`exclude_if_amu_before()` defined below.
+2 periods: one before AMU (defined by a set of antimicrobials) and one after AMU
+(**Figure 2**). The exact week where AMU starts is excluded from the analysis.
+For some disease episodes there might be no AMU at all. On the contrary, for
+some other disease episodes, there might be AMU from the beginning of the
+episode. In those cases, we will have only a `before` or an `after` period.
+Also, because we really want to ascertain that our AMU can be considered as
+therapeutic, will exclude from the analysis all the disease episodes that had
+AMU during the `x` weeks before the start of the episode. This is what is done
+by the function `exclude_if_amu_before()` defined below.
+
+<div style="text-align:center"> <img src="fig therapeutic 2.png" width="600"/> </div>
+
+**Figure 2: Separating the before from the after AMU in all disease episode.**
+In this example, the arrows show the first 2 and the last flocks. Each flock
+starts on the left end and ends on the right end of the arrow and the length of
+the arrow is the duration of the flock. Colored sections represent disease
+episodes as identified in Figure 1. The red rectangles represent the first week
+of AMU in the disease episodes. Sometimes there is no AMU at all during the
+disease episode (as on the third episode of the first flock) and some other
+times the firt week of AMU is the first week of the episode as on the second
+episode of the second flock or the first episode of the last flock. Once these
+first weeks of AMU are identified in all the disease episodes, we gather, from
+all the disease episodes of all the flock, all the weeks that occur before (in
+blue) and all the weeks that occur after (in green) these first week of AMU, 
+making 2 arms: "before" and "after".
 
 Once this is done, we end up with two arms of weeks: one `before` and one `after`
-AMU. We can then estimate and compare the mortality rates in these two arms with
-a logistic regression as detailed below. The great advantage of a logistic
-regression is that it allows to include covariables in order to control for
-potential confounding effects. For the purpose of the examples below, we will
-use the following sets of clinical signs to define disease episodes:
+AMU (**Figure 2**). We can then estimate and compare the mortality rates in
+these two arms with a logistic regression as detailed below. The great advantage
+of a logistic regression is that it allows to include covariables in order to
+control for potential confounding effects. For the purpose of the examples
+below, we will use the following sets of clinical signs to define disease
+episodes:
 
 ```{r}
 cs_set <- c("malaise", "diarrhoea")
