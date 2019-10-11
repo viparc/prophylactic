@@ -1726,18 +1726,14 @@ if (length(to_install)) install.packages(to_install)</code></pre>
     which() %&gt;%
     head(1)
   if (length(start) &lt; 1) return(list(df, NULL)) # there is never AMU
-  if (start &lt; 3) return(list(NULL, df[-(1:start), ])) # AMU starts on any of the first 2 weeks
+  if (start &lt; 2) return(list(NULL, df[-1, ])) # AMU starts on the first week
   nr &lt;- nrow(df)
-  if (start &gt; nr - 2) return(list(df[-(start:nr), ], NULL)) # AMU starts on any of the last 2 weeks
+  if (start == nr) return(list(df[-nr, ], NULL)) # AMU starts on the last week
   list(df[1:(start - 1), ], df[(start + 1):nr, ])
 }</code></pre>
-<p>Note that we need at least 2 weeks to be able to calculate a mortality rate. That’s why we consider the cases where AMU starts during the first two weeks or the last two weeks of the episode. Let’s try it:</p>
+<p>Let’s try it:</p>
 <pre class="r"><code>b &lt;- lapply(a, before_after, am_set)</code></pre>
-<p>Finally, since the mortality rate can be calculated only if we have at least 2 consecutive weeks, we need to exclude all the disease episodes that have only 1 week.</p>
-<pre class="r"><code>remove_short_episodes &lt;- function(lst) {
-  lst[sapply(lst, nrow) &gt; 1]
-} </code></pre>
-<p>A pipeline that assembles the above defined <code>split_by_disease_episode()</code>, <code>exclude_if_amu_before()</code>, <code>before_after()</code> and <code>remove_short_episdoes()</code> functions in order to prepare the data for analysis:</p>
+<p>A pipeline that assembles the above defined <code>split_by_disease_episode()</code>, <code>exclude_if_amu_before()</code> and <code>before_after()</code> functions in order to prepare the data for analysis:</p>
 <pre class="r"><code>prepare_data &lt;- function(df, cs, am, gap, x) {
   require(magrittr)
   df %&gt;% 
@@ -1750,7 +1746,6 @@ if (length(to_install)) install.packages(to_install)</code></pre>
     lapply(before_after, am_set) %&gt;% 
     purrr::transpose() %&gt;%
     lapply(purrr::compact) %&gt;% # because before_after() potentially generates NULL elements
-    lapply(remove_short_episodes) %&gt;% 
     setNames(c(&quot;before&quot;, &quot;after&quot;)) %&gt;% 
     lapply(dplyr::bind_rows) %&gt;% 
     dplyr::bind_rows(.id = &quot;arm&quot;)
@@ -1763,7 +1758,7 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 <pre class="r"><code>table(viparc2$arm)</code></pre>
 <pre><code>## 
 ##  after before 
-##    329    344</code></pre>
+##    353    491</code></pre>
 </div>
 <div id="comparing-mortality-rates" class="section level2">
 <h2>Comparing mortality rates</h2>
@@ -1775,11 +1770,11 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 ## 
 ## Coefficients:
 ## (Intercept)    armbefore  
-##     -3.4953       0.8669  
+##      -3.480        1.002  
 ## 
-## Degrees of Freedom: 672 Total (i.e. Null);  671 Residual
-## Null Deviance:       34530 
-## Residual Deviance: 32460     AIC: 34720</code></pre>
+## Degrees of Freedom: 843 Total (i.e. Null);  842 Residual
+## Null Deviance:       52410 
+## Residual Deviance: 48890     AIC: 51770</code></pre>
 <p>Note that, in this model, if you wish to correct for potential counfounding effects such as chicken age or the use of other antimicrobials or the presence of other clinical signs or AMU during the first stages of the flock, you will have to include the corresponding variables in the formala of the model, making sure that the <code>arm</code> variable is the last one. You can explore the model summary:</p>
 <pre class="r"><code>summary(mod)</code></pre>
 <pre><code>## 
@@ -1789,20 +1784,20 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 ## 
 ## Deviance Residuals: 
 ##     Min       1Q   Median       3Q      Max  
-## -14.571   -4.714   -2.447    0.563   39.831  
+## -16.023   -4.978   -2.584    0.597   53.769  
 ## 
 ## Coefficients:
 ##             Estimate Std. Error z value Pr(&gt;|z|)    
-## (Intercept) -3.49531    0.01623 -215.42   &lt;2e-16 ***
-## armbefore    0.86694    0.01976   43.88   &lt;2e-16 ***
+## (Intercept) -3.47977    0.01562 -222.76   &lt;2e-16 ***
+## armbefore    1.00185    0.01803   55.56   &lt;2e-16 ***
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
 ## 
 ## (Dispersion parameter for binomial family taken to be 1)
 ## 
-##     Null deviance: 34533  on 672  degrees of freedom
-## Residual deviance: 32463  on 671  degrees of freedom
-## AIC: 34724
+##     Null deviance: 52411  on 843  degrees of freedom
+## Residual deviance: 48889  on 842  degrees of freedom
+## AIC: 51768
 ## 
 ## Number of Fisher Scoring iterations: 5</code></pre>
 <p>An see the significativity of the therapeutic AMU:</p>
@@ -1817,8 +1812,8 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 ## 
 ## 
 ##      Df Deviance Resid. Df Resid. Dev  Pr(&gt;Chi)    
-## NULL                   672      34533              
-## arm   1   2070.7       671      32463 &lt; 2.2e-16 ***
+## NULL                   843      52411              
+## arm   1   3522.2       842      48889 &lt; 2.2e-16 ***
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
 <p>In absence of any covariable (age of the flock, etc…), you can also compute the death rates for the two arms (<code>before</code> and <code>after</code>) straightforwardly thanks to the following function:</p>
@@ -1838,8 +1833,8 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 <p>Let’s try it:</p>
 <pre class="r"><code>death_rate(mod)</code></pre>
 <pre><code>##      arm   estimate      lower      upper
-## 1 before 0.06733469 0.06596056 0.06873535
-## 2  after 0.02944607 0.02855066 0.03036868</code></pre>
+## 1 before 0.07742014 0.07616849 0.07869061
+## 2  after 0.02989321 0.02901799 0.03079399</code></pre>
 <p>These “rates” are the individual probability of death per week. There may be the possibility to compute similar things accounting for covariates but I need to do some research on that.</p>
 </div>
 

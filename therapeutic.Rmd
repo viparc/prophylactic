@@ -62,7 +62,6 @@ symptoms we allow ourself to skip when defining a disease episode. Below the
 arrow are 3 examples of disease episodes definitions with 3 episodes when
 `gap = 0`, 2 episodes when `gap = 1` and 1 episode only when `gap = 3`.
 
-
 Once this is done, the next step consists in splitting each disease episode into
 2 periods: one before AMU (defined by a set of antimicrobials) and one after AMU
 (**Figure 2**). The exact week where AMU starts is excluded from the analysis.
@@ -337,34 +336,22 @@ before_after <- function(df, ab) {
     which() %>%
     head(1)
   if (length(start) < 1) return(list(df, NULL)) # there is never AMU
-  if (start < 3) return(list(NULL, df[-(1:start), ])) # AMU starts on any of the first 2 weeks
+  if (start < 2) return(list(NULL, df[-1, ])) # AMU starts on the first week
   nr <- nrow(df)
-  if (start > nr - 2) return(list(df[-(start:nr), ], NULL)) # AMU starts on any of the last 2 weeks
+  if (start == nr) return(list(df[-nr, ], NULL)) # AMU starts on the last week
   list(df[1:(start - 1), ], df[(start + 1):nr, ])
 }
 ```
 
-Note that we need at least 2 weeks to be able to calculate a mortality rate.
-That's why we consider the cases where AMU starts during the first two weeks or
-the last two weeks of the episode. Let's try it:
+Let's try it:
 
 ```{r}
 b <- lapply(a, before_after, am_set)
 ```
 
-Finally, since the mortality rate can be calculated only if we have at least 2
-consecutive weeks, we need to exclude all the disease episodes that have only 1
-week.
-
-```{r}
-remove_short_episodes <- function(lst) {
-  lst[sapply(lst, nrow) > 1]
-} 
-```
-
 A pipeline that assembles the above defined `split_by_disease_episode()`,
-`exclude_if_amu_before()`, `before_after()` and `remove_short_episdoes()`
-functions in order to prepare the data for analysis:
+`exclude_if_amu_before()` and `before_after()` functions in order to prepare the
+data for analysis:
 
 ```{r}
 prepare_data <- function(df, cs, am, gap, x) {
@@ -379,7 +366,6 @@ prepare_data <- function(df, cs, am, gap, x) {
     lapply(before_after, am_set) %>% 
     purrr::transpose() %>%
     lapply(purrr::compact) %>% # because before_after() potentially generates NULL elements
-    lapply(remove_short_episodes) %>% 
     setNames(c("before", "after")) %>% 
     lapply(dplyr::bind_rows) %>% 
     dplyr::bind_rows(.id = "arm")
