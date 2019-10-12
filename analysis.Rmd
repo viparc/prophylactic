@@ -868,7 +868,7 @@ batch %>%
   dplyr::bind_cols(plan, .) # intermediate value re-used here
 ```
 
-### A function to run a pipeline on several values of the tuning parameters
+### `run_plan()` and Co
 
 Let's make a function out of this above code:
 

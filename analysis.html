@@ -2708,8 +2708,8 @@ cs_set &lt;- c(&quot;malaise&quot;, &quot;diarrhoea&quot;)</code></pre>
 ## 7         1        2         2  2398 &lt;table&gt; &lt;table&gt; -0.171  0.318 &lt;dbl [2]&gt;
 ## 8         2        2         2  1790 &lt;table&gt; &lt;table&gt;  0.0741 0.737 &lt;dbl [2]&gt;</code></pre>
 </div>
-<div id="a-function-to-run-a-pipeline-on-several-values-of-the-tuning-parameters" class="section level3">
-<h3>A function to run a pipeline on several values of the tuning parameters</h3>
+<div id="run_plan-and-co" class="section level3">
+<h3><code>run_plan()</code> and Co</h3>
 <p>Let’s make a function out of this above code:</p>
 <pre class="r"><code>run_plan &lt;- function(f, df, clinical_signs = NULL, antimicrobials = NULL, filtering = 1, watching = 1, first_wks = 1, nb_cores = 1) {
   require(magrittr)
