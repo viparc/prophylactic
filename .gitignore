@@ -11,3 +11,5 @@ making datasets.R
 rsconnect/*
 Icon
 prophylactic.Rproj
+*pdf
+*rds
