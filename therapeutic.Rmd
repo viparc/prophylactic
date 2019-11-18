@@ -38,9 +38,9 @@ options(width = 137)
 
 As for the analysis of the
 [prophylactic AMU](https://viparc.github.io/prophylactic/analysis.html), the
-main difficulty here consists in rearranging the data. Once the the data is
-properly rearranged, then the analysis is pretty classical. In this section we
-sketch out the rationale of our analysis.
+main difficulty here consists in rearranging the data. Once the data is properly
+rearranged, then the analysis is pretty classical. In this section we sketch out
+the rationale of our analysis.
 
 Because we are interested in therapeutic AMU, we will consider in this analysis
 only weeks that are from **disease episodes**. A first challenge will thus
@@ -53,41 +53,45 @@ and also in terms of `gap` (see the functions `fill_gaps()` and
 **Figure 1: Defining a disease episode.** The arrow represents the weeks (each
 rectangle is a week) of a flock, from the first week on the left ot the last one
 on the right. The red dots represent the presence of disease, as defined by a
-set of clinical signs (there is disease if at least one of the clinical signs of
-the set is reported). In order to account for the fact that symptoms may not be
-always reported, we want to allow the possibility to convert one or a few weeks
-without reported symptoms and surrounded by weeks with reported symptoms into
-one single disease episode. The parameter `gap` is the number of week(s) without
-symptoms we allow ourself to skip when defining a disease episode. Below the
-arrow are 3 examples of disease episodes definitions with 3 episodes when
-`gap = 0`, 2 episodes when `gap = 1` and 1 episode only when `gap = 3`.
+set of clinical signs (where here we consider there is disease if at least one
+of the clinical signs of the set is reported). In order to account for the fact
+that symptoms may not be always reported, we want to allow the possibility to
+convert one or a few weeks without reported symptoms and surrounded by weeks
+with reported symptoms into one single disease episode. The parameter `gap` is
+the number of week(s) without symptoms we allow ourself to skip when defining a
+disease episode. Below the arrow are 3 examples of disease episodes definitions
+with 3 episodes when `gap = 0`, 2 episodes when `gap = 1` and 1 episode only
+when `gap = 3`.
 
 Once this is done, the next step consists in splitting each disease episode into
 2 periods: one before AMU (defined by a set of antimicrobials) and one after AMU
-(**Figure 2**). The exact week where AMU starts is excluded from the analysis.
-For some disease episodes there might be no AMU at all. On the contrary, for
-some other disease episodes, there might be AMU from the beginning of the
-episode. In those cases, we will have only a `before` or an `after` period.
-Also, because we really want to ascertain that our AMU can be considered as
-therapeutic, will exclude from the analysis all the disease episodes that had
-AMU during the `x` weeks before the start of the episode. This is what is done
-by the function `exclude_if_amu_before()` defined below.
+(**Figure 2**). Same as for the symptoms: here we consider there is AMU if at
+least one of the drugs set that we consider is reported. The exact week where
+AMU starts is excluded from the analysis because for this particular week it's
+impossible to infer any form of causality. For some disease episodes there might
+be no AMU at all. On the contrary, for some other disease episodes, there might
+be AMU from the beginning of the episode. In those cases, we will have only a
+`before` or an `after` period. Also, because we really want to ascertain that
+our AMU can be considered as therapeutic, will exclude from the analysis all the
+disease episodes that had AMU during the `x` weeks before the start of the
+episode. This is what is done by the function `exclude_if_amu_before()` defined
+below.
 
 <div style="text-align:center"> <img src="fig therapeutic 2.png" width="600"/> </div>
 
-**Figure 2: Separating the before from the after AMU in all disease episode.**
-In this example, the arrows show the first 2 and the last flocks. Each flock
-starts on the left end and ends on the right end of the arrow and the length of
-the arrow is the duration of the flock. Colored sections represent disease
-episodes as identified in Figure 1. The red rectangles represent the first week
-of AMU in the disease episodes. Sometimes there is no AMU at all during the
-disease episode (as on the third episode of the first flock) and some other
-times the firt week of AMU is the first week of the episode as on the second
-episode of the second flock or the first episode of the last flock. Once these
-first weeks of AMU are identified in all the disease episodes, we gather, from
-all the disease episodes of all the flock, all the weeks that occur before (in
-blue) and all the weeks that occur after (in green) these first week of AMU, 
-making 2 arms: "before" and "after".
+**Figure 2: Separating the weeks before from the weeks after AMU in all disease episode.**
+In this example, the arrows show the first 2 and the last flocks of our data.
+Each flock starts on the left end and ends on the right end of the arrow and the
+length of the arrow is the duration of the flock. Colored sections represent
+disease episodes as identified in Figure 1. The red rectangles represent the
+first week of AMU in the disease episodes. Sometimes there is no AMU at all
+during the disease episode (as on the third episode of the first flock) and some
+other times the firt week of AMU is the first week of the episode as on the
+second episode of the second flock or the first episode of the last flock. Once
+these first weeks of AMU are identified in all the disease episodes, we gather,
+from all the disease episodes of all the flocks, all the weeks that occur before
+(in blue) and all the weeks that occur after (in green) these first weeks of
+AMU, making 2 arms: "before" and "after".
 
 Once this is done, we end up with two arms of weeks: one `before` and one `after`
 AMU (**Figure 2**). We can then estimate and compare the mortality rates in
@@ -123,7 +127,7 @@ but the function `prepare_data()` at the end is a pipeline that puts everything
 together, with `cs_set`, `am_set`, `gap` and `x` as tuning parameters. The last
 section shows the different ways (basically with and without correcting for
 potential condounding effects) to performed the statistical analysis. The user
-can thus prepare a number of different data sets, depending the values of the
+can thus prepare a number of different data sets, depending on the values of the
 `cs_set`, `am_set`, `gap` and `x` arguments and, on each of these data sets, 
 perform a number of analyses depending on whether (s)he wants to correct for
 potential confounding effects, and which ones.
@@ -148,18 +152,19 @@ library(magrittr)
 
 ```{r eval = FALSE}
 viparc <- readr::read_csv("https://raw.githubusercontent.com/viparc/prophylactic/master/data/viparc_qualitative.csv",
-                          col_types = paste(c("ciiidd", rep("l", 51)), collapse = ""))
+                          col_types = paste(c("ciiiddd", rep("l", 51)), collapse = ""))
 ```
 
-```{r eval = TRUE, include = FALSE}
+```{r include = FALSE}
 viparc <- readr::read_csv("data/viparc_qualitative.csv",
-                          col_types = paste(c("ciiidd", rep("l", 51)), collapse = ""))
+                          col_types = paste(c("ciiiddd", rep("l", 51)), collapse = ""))
 ```
 
 We have 4 types of variables in this data frame:
 
 * week ID with the variables `farm`, `flock` and `week`;
-* chicken demography data with the variables `nb_chicken`, `chicken_disease_death` and `chicken_sudden_death`;
+* chicken demography data with the variables `nb_chicken`, `nb_chicken_sold`,
+  `chicken_disease_death` and `chicken_sudden_death`;
 * presence of clinical signs with the variables `respiratory`, `diarrhoea`,
   `cns`, `malaise`, `leg_lesions` and `sudden_death`;
 * AMU (presence / absence too) with the `r ncol(viparc) - 12` variables
@@ -297,13 +302,14 @@ defined by a set of antimicrobials.
 ```{r}
 exclude_if_amu_before <- function(df, x, df_ref, ab) {
   require(magrittr)
+  am <- ab
   first_week <- min(df$week)
   if (first_week == 1) return(df)
   weeks <- (first_week - x):(first_week - 1)
   weeks <- weeks[weeks > 0]
   amu_before_episode <- df_ref %>% 
     dplyr::filter(farm == df$farm[1], flock == df$flock[1], week %in% weeks) %>% 
-    dplyr::select(ab) %>% 
+    dplyr::select({{ am }}) %>% 
     rowSums() %>% 
     as.logical() %>% 
     any()
@@ -329,8 +335,9 @@ antimicrobials.
 ```{r}
 before_after <- function(df, ab) {
   require(magrittr)
+  am <- ab
   start <- df %>%
-    dplyr::select(ab) %>%
+    dplyr::select({{ am }}) %>%
     rowSums() %>%
     as.logical() %>%
     which() %>%
@@ -394,7 +401,7 @@ Once the data is properly put in shape, the actual statistical analysis is quite
 classical. Here, we consider a logistic regression:
 
 ```{r}
-(mod <- glm(matrix(c(chicken_disease_death + chicken_sudden_death, nb_chicken), ncol = 2) ~ arm, binomial, viparc2))
+(mod <- glm(matrix(c(chicken_disease_death + chicken_sudden_death, nb_chicken + nb_chicken_sold), ncol = 2) ~ arm, binomial, viparc2))
 ```
 
 Note that, in this model, if you wish to correct for potential counfounding
@@ -407,7 +414,7 @@ sure that the `arm` variable is the last one. You can explore the model summary:
 summary(mod)
 ```
 
-After AMU, the mortality rate is multiplied by the following factor:
+After AMU, the odds of dying is multiplied by the following factor:
 
 ```{r}
 unname(exp(tail(coef(mod), 1)))
@@ -427,6 +434,8 @@ The significativity of the therapeutic AMU is:
 ```{r}
 anova(mod, test = "LRT")
 ```
+
+### Estimating the mortality rate (in absence of covariables)
 
 In absence of any covariable (age of the flock, etc...), you can also compute
 the death rates for the two arms (`before` and `after`) straightforwardly thanks
@@ -456,4 +465,18 @@ death_rate(mod)
 
 These "rates" are the individual probability of death per week. There may be the
 possibility to compute similar things accounting for covariates but I need to do
-some research on that.
+some research on that. We can however verify that:
+
+```{r}
+0.02989321 / (1 - 0.02989321) / (0.07742014 / (1 - 0.07742014))
+```
+
+And here the probability ratio is
+
+```{r}
+0.02989321 / 0.07742014
+```
+
+## Adding covariables
+
+
