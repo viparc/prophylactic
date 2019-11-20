@@ -1736,8 +1736,13 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 <p>Let’s try it:</p>
 <pre class="r"><code>b &lt;- lapply(a, before_after, am_set)</code></pre>
 <p>A pipeline that assembles the above defined <code>split_by_disease_episode()</code>, <code>exclude_if_amu_before()</code> and <code>before_after()</code> functions in order to prepare the data for analysis:</p>
-<pre class="r"><code>prepare_data &lt;- function(df, cs, am, gap, x) {
+<pre class="r"><code>prepare_data &lt;- function(df, cs = NULL, am = NULL, gap = 1, x = 1) {
   require(magrittr)
+  var_names &lt;- setdiff(names(df), c(&quot;arm&quot;, &quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;, &quot;nb_chicken&quot;,
+                                    &quot;nb_chicken_sold&quot;, &quot;chicken_disease_death&quot;,
+                                    &quot;chicekn_sudden_death&quot;))
+  if (is.null(cs)) cs &lt;- grep(&quot;_use$&quot;, var_names, value = TRUE, invert = TRUE)
+  if (is.null(am)) am &lt;- grep(&quot;_use$&quot;, var_names, value = TRUE)
   df %&gt;% 
     dplyr::arrange(week) %&gt;% 
     dplyr::group_by(farm, flock) %&gt;% 
@@ -1751,7 +1756,9 @@ if (length(to_install)) install.packages(to_install)</code></pre>
     setNames(c(&quot;before&quot;, &quot;after&quot;)) %&gt;% 
     lapply(dplyr::bind_rows) %&gt;% 
     dplyr::bind_rows(.id = &quot;arm&quot;) %&gt;% 
-    dplyr::mutate(arm = factor(arm, c(&quot;before&quot;, &quot;after&quot;)))
+    dplyr::mutate(arm = factor(arm, c(&quot;before&quot;, &quot;after&quot;)),
+                  suc = chicken_disease_death + chicken_sudden_death,
+                  fai = nb_chicken + nb_chicken_sold)
 }</code></pre>
 <p>Let’s try it (takes a few seconds to run):</p>
 <pre class="r"><code>viparc2 &lt;- prepare_data(viparc,
@@ -1766,11 +1773,9 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 <div id="comparing-mortality-rates" class="section level2">
 <h2>Comparing mortality rates</h2>
 <p>Once the data is properly put in shape, the actual statistical analysis is quite classical. Here, we consider a logistic regression:</p>
-<pre class="r"><code>(mod &lt;- glm(matrix(c(chicken_disease_death + chicken_sudden_death, nb_chicken + nb_chicken_sold), ncol = 2) ~ arm, binomial, viparc2))</code></pre>
+<pre class="r"><code>(mod &lt;- glm(cbind(suc, fai) ~ arm, binomial, viparc2))</code></pre>
 <pre><code>## 
-## Call:  glm(formula = matrix(c(chicken_disease_death + chicken_sudden_death, 
-##     nb_chicken + nb_chicken_sold), ncol = 2) ~ arm, family = binomial, 
-##     data = viparc2)
+## Call:  glm(formula = cbind(suc, fai) ~ arm, family = binomial, data = viparc2)
 ## 
 ## Coefficients:
 ## (Intercept)     armafter  
@@ -1783,9 +1788,7 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 <pre class="r"><code>summary(mod)</code></pre>
 <pre><code>## 
 ## Call:
-## glm(formula = matrix(c(chicken_disease_death + chicken_sudden_death, 
-##     nb_chicken + nb_chicken_sold), ncol = 2) ~ arm, family = binomial, 
-##     data = viparc2)
+## glm(formula = cbind(suc, fai) ~ arm, family = binomial, data = viparc2)
 ## 
 ## Deviance Residuals: 
 ##     Min       1Q   Median       3Q      Max  
@@ -1821,7 +1824,7 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 ## 
 ## Model: binomial, link: logit
 ## 
-## Response: matrix(c(chicken_disease_death + chicken_sudden_death, nb_chicken + nb_chicken_sold), ncol = 2)
+## Response: cbind(suc, fai)
 ## 
 ## Terms added sequentially (first to last)
 ## 
@@ -1862,6 +1865,253 @@ if (length(to_install)) install.packages(to_install)</code></pre>
 </div>
 <div id="adding-covariables" class="section level2">
 <h2>Adding covariables</h2>
+<p>The only covariable that seems to make sense to include is the age of the chicken:</p>
+<pre class="r"><code>(mod &lt;- glm(cbind(suc, fai) ~ week + arm, binomial, viparc2))</code></pre>
+<pre><code>## 
+## Call:  glm(formula = cbind(suc, fai) ~ week + arm, family = binomial, 
+##     data = viparc2)
+## 
+## Coefficients:
+## (Intercept)         week     armafter  
+##    -3.09268      0.06406     -0.83878  
+## 
+## Degrees of Freedom: 843 Total (i.e. Null);  841 Residual
+## Null Deviance:       38000 
+## Residual Deviance: 33390     AIC: 36400</code></pre>
+<pre class="r"><code>anova(mod, test = &quot;LRT&quot;)</code></pre>
+<pre><code>## Analysis of Deviance Table
+## 
+## Model: binomial, link: logit
+## 
+## Response: cbind(suc, fai)
+## 
+## Terms added sequentially (first to last)
+## 
+## 
+##      Df Deviance Resid. Df Resid. Dev  Pr(&gt;Chi)    
+## NULL                   843      37999              
+## week  1   2271.4       842      35728 &lt; 2.2e-16 ***
+## arm   1   2338.0       841      33390 &lt; 2.2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
+<p>Alternatively, this can be modeled with a GAM:</p>
+<pre class="r"><code>(mod &lt;- mgcv::gam(cbind(suc, fai) ~ s(week) + arm, binomial, viparc2, method = &quot;REML&quot;))</code></pre>
+<pre><code>## 
+## Family: binomial 
+## Link function: logit 
+## 
+## Formula:
+## cbind(suc, fai) ~ s(week) + arm
+## 
+## Estimated degrees of freedom:
+## 8.9  total = 10.9 
+## 
+## REML score: 17747.96</code></pre>
+<pre class="r"><code>summary(mod)</code></pre>
+<pre><code>## 
+## Family: binomial 
+## Link function: logit 
+## 
+## Formula:
+## cbind(suc, fai) ~ s(week) + arm
+## 
+## Parametric coefficients:
+##              Estimate Std. Error z value Pr(&gt;|z|)    
+## (Intercept) -2.639218   0.009666 -273.05   &lt;2e-16 ***
+## armafter    -0.849133   0.018603  -45.65   &lt;2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Approximate significance of smooth terms:
+##           edf Ref.df Chi.sq p-value    
+## s(week) 8.898  8.995   2373  &lt;2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## R-sq.(adj) =  0.0882   Deviance explained = 14.7%
+## -REML =  17748  Scale est. = 1         n = 844</code></pre>
+</div>
+<div id="a-pipeline" class="section level2">
+<h2>A pipeline</h2>
+<p>As done for the prophylactic study, let’s define the generic and methods <code>get_outputs()</code>:</p>
+<pre class="r"><code>get_outputs &lt;- function (x, ...) {
+  UseMethod(&quot;get_outputs&quot;, x)
+}</code></pre>
+<p>for the generic and</p>
+<pre class="r"><code>get_outputs.glm &lt;- function(x) {
+  conf_int &lt;- confint(x)
+  c(n    = nrow(x$model),
+    or   = tail(coef(x), 1),
+    p    = tail(anova(x, test = &quot;LRT&quot;)$`Pr(&gt;Chi)`, 1),
+    ci   = conf_int[nrow(conf_int), ])
+}</code></pre>
+<p>for the GLM method and</p>
+<pre class="r"><code>get_outputs.gam &lt;- function(x, level = .95) {
+  summ &lt;- summary(x)
+  conf_int &lt;- mgcv.helper::confint.gam(x, level = level)
+  c(n    = nrow(x$model),
+    or   = unname(tail(summ$p.coef, 1)),
+    p    = unname(tail(summ$p.pv, 1)),
+    ci   = unlist(conf_int[nrow(conf_int), 5:6]))
+}</code></pre>
+<p>for the GAM method. Let’s try them:</p>
+<pre class="r"><code>viparc2 %&gt;% 
+  glm(cbind(suc, fai) ~ week + arm, binomial, .) %&gt;% 
+  get_outputs()</code></pre>
+<pre><code>##           n or.armafter           p    ci.2.5 %   ci.97.5 % 
+## 844.0000000  -0.8387795   0.0000000  -0.8747153  -0.8030341</code></pre>
+<p>and</p>
+<pre class="r"><code>viparc2 %&gt;% 
+  mgcv::gam(cbind(suc, fai) ~ s(week) + arm, binomial, ., method = &quot;REML&quot;) %&gt;% 
+  get_outputs()</code></pre>
+<pre><code>##           n          or           p     ci.2.5%    ci.97.5% 
+## 844.0000000  -0.8491334   0.0000000  -0.8856469  -0.8126198</code></pre>
+<p>Let’s make a batch:</p>
+<pre class="r"><code>(batch &lt;- expand.grid(cs = list(c(&quot;malaise&quot;, &quot;diarrhoea&quot;),
+                                c(&quot;respiratory&quot;, &quot;cns&quot;)),
+                      am = list(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;),
+                                c(&quot;apramycin_use&quot;, &quot;cefadroxil_use&quot;))))</code></pre>
+<pre><code>##                   cs                                am
+## 1 malaise, diarrhoea colistin_use, oxytetracycline_use
+## 2   respiratory, cns colistin_use, oxytetracycline_use
+## 3 malaise, diarrhoea     apramycin_use, cefadroxil_use
+## 4   respiratory, cns     apramycin_use, cefadroxil_use</code></pre>
+<p>The corresponding data sets:</p>
+<pre class="r"><code>datasets &lt;- purrr::pmap(batch, prepare_data, df = viparc)</code></pre>
+<p>The models:</p>
+<pre class="r"><code>glms &lt;- t(sapply(datasets, function(x) get_outputs(glm(cbind(suc, fai) ~ week + arm, binomial, x))))</code></pre>
+<p>Or with a GAM:</p>
+<pre class="r"><code>gams &lt;- t(sapply(datasets, function(x) get_outputs(mgcv::gam(cbind(suc, fai) ~ s(week) + arm, binomial, x, method = &quot;REML&quot;))))</code></pre>
+<p>Let’s write pipelines:</p>
+<pre class="r"><code>pipeline_glm &lt;- function(df, cs = NULL, am = NULL, gap = 1, x = 1) {
+  require(magrittr)
+  prepare_data(df, cs, am, gap, x) %$% 
+    glm(cbind(suc, fai) ~ week + arm, binomial) %&gt;% 
+    get_outputs()
+}</code></pre>
+<p>and:</p>
+<pre class="r"><code>pipeline_gam &lt;- function(df, cs = NULL, am = NULL, gap = 1, x = 1) {
+  require(magrittr)
+  prepare_data(df, cs, am, gap, x) %$% 
+    mgcv::gam(cbind(suc, fai) ~ s(week) + arm, binomial, method = &quot;REML&quot;) %&gt;% 
+    get_outputs()
+}</code></pre>
+<p>Let’s try it:</p>
+<pre class="r"><code>pipeline_glm(viparc, cs_set, am_set)</code></pre>
+<pre><code>##           n or.armafter           p    ci.2.5 %   ci.97.5 % 
+## 928.0000000  -0.8640434   0.0000000  -0.8984372  -0.8298357</code></pre>
+<p>and</p>
+<pre class="r"><code>pipeline_gam(viparc, cs_set, am_set)</code></pre>
+<pre><code>##           n          or           p     ci.2.5%    ci.97.5% 
+## 928.0000000  -0.8538708   0.0000000  -0.8886307  -0.8191110</code></pre>
+<pre class="r"><code>a &lt;- batch %&gt;% 
+  tibble::as_tibble() %&gt;%
+  assign(&quot;plan&quot;, ., 1) %&gt;% # saving intermediate value
+  c(FUN = pipeline_gam, ., MoreArgs = list(list(df = viparc)), SIMPLIFY = FALSE, mc.cores = 3) %&gt;%
+  do.call(parallel::mcmapply, .) %&gt;% 
+  do.call(dplyr::bind_rows, .) %&gt;% 
+  dplyr::bind_cols(plan, .)</code></pre>
+<p>Here is a full pipeline around GAM:</p>
+<pre class="r"><code>run_plan &lt;- function(df, cs = NULL, am = NULL, gap = 1, x = 1) {
+  require(magrittr)
+  
+  var_names &lt;- setdiff(names(df), c(&quot;arm&quot;, &quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;, &quot;nb_chicken&quot;, &quot;nb_chicken_sold&quot;, &quot;chicken_disease_death&quot;, &quot;chicken_sudden_death&quot;))
+  if (is.null(cs)) cs &lt;- list(grep(&quot;_use$&quot;, var_names, value = TRUE, invert = TRUE))
+  else if (! is.list(cs)) cs &lt;- list(cs)
+  if (is.null(am)) am &lt;- list(grep(&quot;_use$&quot;, var_names, value = TRUE))
+  else if (! is.list(am)) am &lt;- list(am)
+  
+  expand.grid(cs = cs, am = am, gap = gap, x = x) %&gt;%
+    tibble::as_tibble() %&gt;%
+    assign(&quot;plan&quot;, ., 1) %&gt;% # saving intermediate value
+    c(FUN = purrr::safely(pipeline_gam), ., MoreArgs = list(list(df = df)), SIMPLIFY = FALSE, mc.cores = 4) %&gt;%
+    do.call(parallel::mcmapply, .) %&gt;% 
+    lapply(function(x) x$result) %&gt;%
+    assign(&quot;results&quot;, ., 1) %&gt;% 
+    sapply(is.null) %&gt;% 
+    `[&lt;-`(results, ., list(c(&quot;n&quot; = NA, &quot;or&quot; = NA, &quot;p&quot; = NA, &quot;ci.2.5%&quot; = NA, &quot;ci.97.5%&quot; = NA))) %&gt;% 
+    do.call(dplyr::bind_rows, .) %&gt;% 
+    dplyr::bind_cols(plan, .)
+}</code></pre>
+<p>Let’s try it:</p>
+<pre class="r"><code>a &lt;- run_plan(viparc, list(c(&quot;malaise&quot;, &quot;diarrhoea&quot;),
+                           c(&quot;respiratory&quot;, &quot;cns&quot;)),
+                      list(c(&quot;colistin_use&quot;, &quot;oxytetracycline_use&quot;),
+                           c(&quot;apramycin_use&quot;, &quot;cefadroxil_use&quot;)))</code></pre>
+<p>The following function develops the list of clinical signs and / or antimicrobials so that they can easily be read in the data frame:</p>
+<pre class="r"><code>develop &lt;- function(df, var = NULL) {
+  names_df &lt;- names(df)
+  var_ref &lt;- c(&quot;cs&quot;, &quot;am&quot;)
+  if (is.null(var)) var &lt;- intersect(names_df, var_ref)
+  stopifnot(var %in% names_df)
+  stopifnot(var %in% var_ref)
+  dplyr::mutate_at(df, var, ~ sapply(., paste, collapse = &quot;, &quot;))
+}</code></pre>
+<p>The second one removes the columns that contain no variability:</p>
+<pre class="r"><code>simplify &lt;- function(df) {
+  df[, sapply(df, function(x) length(unique(x))) &gt; 1]
+}</code></pre>
+<p>Let’s try them:</p>
+<pre class="r"><code>develop(a)</code></pre>
+<pre><code>## # A tibble: 4 x 9
+##   cs                 am                                  gap     x     n     or        p `ci.2.5%` `ci.97.5%`
+##   &lt;chr&gt;              &lt;chr&gt;                             &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;  &lt;dbl&gt;    &lt;dbl&gt;     &lt;dbl&gt;      &lt;dbl&gt;
+## 1 malaise, diarrhoea colistin_use, oxytetracycline_use     1     1   928 -0.854 0.          -0.889     -0.819
+## 2 respiratory, cns   colistin_use, oxytetracycline_use     1     1   196  0.215 1.10e- 6     0.128      0.302
+## 3 malaise, diarrhoea apramycin_use, cefadroxil_use         1     1  1030 -0.771 0.          -0.804     -0.737
+## 4 respiratory, cns   apramycin_use, cefadroxil_use         1     1   229  0.318 5.28e-24     0.256      0.380</code></pre>
+<p>and</p>
+<pre class="r"><code>simplify(a)</code></pre>
+<pre><code>## # A tibble: 4 x 7
+##   cs        am            n     or        p `ci.2.5%` `ci.97.5%`
+##   &lt;list&gt;    &lt;list&gt;    &lt;dbl&gt;  &lt;dbl&gt;    &lt;dbl&gt;     &lt;dbl&gt;      &lt;dbl&gt;
+## 1 &lt;chr [2]&gt; &lt;chr [2]&gt;   928 -0.854 0.          -0.889     -0.819
+## 2 &lt;chr [2]&gt; &lt;chr [2]&gt;   196  0.215 1.10e- 6     0.128      0.302
+## 3 &lt;chr [2]&gt; &lt;chr [2]&gt;  1030 -0.771 0.          -0.804     -0.737
+## 4 &lt;chr [2]&gt; &lt;chr [2]&gt;   229  0.318 5.28e-24     0.256      0.380</code></pre>
+<p>and</p>
+<pre class="r"><code>simplify(develop(a))</code></pre>
+<pre><code>## # A tibble: 4 x 7
+##   cs                 am                                    n     or        p `ci.2.5%` `ci.97.5%`
+##   &lt;chr&gt;              &lt;chr&gt;                             &lt;dbl&gt;  &lt;dbl&gt;    &lt;dbl&gt;     &lt;dbl&gt;      &lt;dbl&gt;
+## 1 malaise, diarrhoea colistin_use, oxytetracycline_use   928 -0.854 0.          -0.889     -0.819
+## 2 respiratory, cns   colistin_use, oxytetracycline_use   196  0.215 1.10e- 6     0.128      0.302
+## 3 malaise, diarrhoea apramycin_use, cefadroxil_use      1030 -0.771 0.          -0.804     -0.737
+## 4 respiratory, cns   apramycin_use, cefadroxil_use       229  0.318 5.28e-24     0.256      0.380</code></pre>
+<div id="generating-tables" class="section level3">
+<h3>Generating tables</h3>
+<p>Let’s download the data on the antimicrobials classes:</p>
+<pre class="r"><code>ab_classes &lt;- readr::read_csv(&quot;https://raw.githubusercontent.com/viparc/clires_data/master/data/antimicrobial_classes.csv&quot;, col_types = &quot;cc&quot;)
+ab_classes$antimicrobial &lt;- paste0(ab_classes$antimicrobial, &quot;_use&quot;)</code></pre>
+<p>It looks like this:</p>
+<pre class="r"><code>ab_classes</code></pre>
+<pre><code>## # A tibble: 44 x 2
+##    antimicrobial    class         
+##    &lt;chr&gt;            &lt;chr&gt;         
+##  1 amoxicillin_use  penecillins   
+##  2 ampicillin_use   penecillins   
+##  3 cefadroxil_use   cephalosporins
+##  4 cefotaxime_use   cephalosporins
+##  5 cephalexin_use   cephalosporins
+##  6 ceftiofur_use    cephalosporins
+##  7 colistin_use     polypeptides  
+##  8 enramycin_use    polypeptides  
+##  9 enrofloxacin_use quinolones    
+## 10 flumequine_use   quinolones    
+## # … with 34 more rows</code></pre>
+<p>Takes 15’:</p>
+<pre class="r"><code>tmp &lt;- run_plan(df = viparc,
+                cs = as.list(setdiff(grep(&quot;_use$&quot;, names(viparc), value = TRUE, invert = TRUE),
+                                     c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;, &quot;nb_chicken&quot;, &quot;nb_chicken_sold&quot;,
+                                       &quot;chicken_disease_death&quot;, &quot;chicken_sudden_death&quot;))),
+                am = split(ab_classes$antimicrobial, ab_classes$class),
+                gap = 0:2,
+                x = 0:2) %&gt;% 
+  dplyr::mutate(cs = unlist(cs),
+                am = names(am)) %&gt;% 
+  dplyr::rename(clinical_signs = cs,
+                class = am)</code></pre>
+</div>
 </div>
 
 

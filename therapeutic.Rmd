@@ -361,8 +361,13 @@ A pipeline that assembles the above defined `split_by_disease_episode()`,
 data for analysis:
 
 ```{r}
-prepare_data <- function(df, cs, am, gap, x) {
+prepare_data <- function(df, cs = NULL, am = NULL, gap = 1, x = 1) {
   require(magrittr)
+  var_names <- setdiff(names(df), c("arm", "farm", "flock", "week", "nb_chicken",
+                                    "nb_chicken_sold", "chicken_disease_death",
+                                    "chicekn_sudden_death"))
+  if (is.null(cs)) cs <- grep("_use$", var_names, value = TRUE, invert = TRUE)
+  if (is.null(am)) am <- grep("_use$", var_names, value = TRUE)
   df %>% 
     dplyr::arrange(week) %>% 
     dplyr::group_by(farm, flock) %>% 
@@ -376,7 +381,9 @@ prepare_data <- function(df, cs, am, gap, x) {
     setNames(c("before", "after")) %>% 
     lapply(dplyr::bind_rows) %>% 
     dplyr::bind_rows(.id = "arm") %>% 
-    dplyr::mutate(arm = factor(arm, c("before", "after")))
+    dplyr::mutate(arm = factor(arm, c("before", "after")),
+                  suc = chicken_disease_death + chicken_sudden_death,
+                  fai = nb_chicken + nb_chicken_sold)
 }
 ```
 
@@ -401,7 +408,7 @@ Once the data is properly put in shape, the actual statistical analysis is quite
 classical. Here, we consider a logistic regression:
 
 ```{r}
-(mod <- glm(matrix(c(chicken_disease_death + chicken_sudden_death, nb_chicken + nb_chicken_sold), ncol = 2) ~ arm, binomial, viparc2))
+(mod <- glm(cbind(suc, fai) ~ arm, binomial, viparc2))
 ```
 
 Note that, in this model, if you wish to correct for potential counfounding
@@ -479,4 +486,263 @@ And here the probability ratio is
 
 ## Adding covariables
 
+The only covariable that seems to make sense to include is the age of the
+chicken:
+
+```{r}
+(mod <- glm(cbind(suc, fai) ~ week + arm, binomial, viparc2))
+```
+
+```{r}
+anova(mod, test = "LRT")
+```
+
+Alternatively, this can be modeled with a GAM:
+
+```{r}
+(mod <- mgcv::gam(cbind(suc, fai) ~ s(week) + arm, binomial, viparc2, method = "REML"))
+```
+
+```{r}
+summary(mod)
+```
+
+## A pipeline
+
+As done for the prophylactic study, let's define the generic and methods
+`get_outputs()`:
+
+```{r}
+get_outputs <- function (x, ...) {
+  UseMethod("get_outputs", x)
+}
+```
+
+for the generic and
+
+```{r}
+get_outputs.glm <- function(x) {
+  conf_int <- confint(x)
+  c(n    = nrow(x$model),
+    or   = tail(coef(x), 1),
+    p    = tail(anova(x, test = "LRT")$`Pr(>Chi)`, 1),
+    ci   = conf_int[nrow(conf_int), ])
+}
+```
+
+for the GLM method and 
+
+```{r}
+get_outputs.gam <- function(x, level = .95) {
+  summ <- summary(x)
+  conf_int <- mgcv.helper::confint.gam(x, level = level)
+  c(n    = nrow(x$model),
+    or   = unname(tail(summ$p.coef, 1)),
+    p    = unname(tail(summ$p.pv, 1)),
+    ci   = unlist(conf_int[nrow(conf_int), 5:6]))
+}
+```
+
+for the GAM method. Let's try them:
+
+```{r}
+viparc2 %>% 
+  glm(cbind(suc, fai) ~ week + arm, binomial, .) %>% 
+  get_outputs()
+```
+
+and 
+
+```{r}
+viparc2 %>% 
+  mgcv::gam(cbind(suc, fai) ~ s(week) + arm, binomial, ., method = "REML") %>% 
+  get_outputs()
+```
+
+Let's make a batch:
+
+```{r}
+(batch <- expand.grid(cs = list(c("malaise", "diarrhoea"),
+                                c("respiratory", "cns")),
+                      am = list(c("colistin_use", "oxytetracycline_use"),
+                                c("apramycin_use", "cefadroxil_use"))))
+```
+
+The corresponding data sets:
+
+```{r}
+datasets <- purrr::pmap(batch, prepare_data, df = viparc)
+```
+
+The models:
+
+```{r}
+glms <- t(sapply(datasets, function(x) get_outputs(glm(cbind(suc, fai) ~ week + arm, binomial, x))))
+```
+
+Or with a GAM:
+
+```{r}
+gams <- t(sapply(datasets, function(x) get_outputs(mgcv::gam(cbind(suc, fai) ~ s(week) + arm, binomial, x, method = "REML"))))
+```
+
+Let's write pipelines:
+
+```{r}
+pipeline_glm <- function(df, cs = NULL, am = NULL, gap = 1, x = 1) {
+  require(magrittr)
+  prepare_data(df, cs, am, gap, x) %$% 
+    glm(cbind(suc, fai) ~ week + arm, binomial) %>% 
+    get_outputs()
+}
+```
+
+and:
+
+```{r}
+pipeline_gam <- function(df, cs = NULL, am = NULL, gap = 1, x = 1) {
+  require(magrittr)
+  prepare_data(df, cs, am, gap, x) %$% 
+    mgcv::gam(cbind(suc, fai) ~ s(week) + arm, binomial, method = "REML") %>% 
+    get_outputs()
+}
+```
+
+Let's try it:
+
+```{r}
+pipeline_glm(viparc, cs_set, am_set)
+```
+
+and
+
+```{r}
+pipeline_gam(viparc, cs_set, am_set)
+```
+
+
+```{r}
+a <- batch %>% 
+  tibble::as_tibble() %>%
+  assign("plan", ., 1) %>% # saving intermediate value
+  c(FUN = pipeline_gam, ., MoreArgs = list(list(df = viparc)), SIMPLIFY = FALSE, mc.cores = 3) %>%
+  do.call(parallel::mcmapply, .) %>% 
+  do.call(dplyr::bind_rows, .) %>% 
+  dplyr::bind_cols(plan, .)
+```
+
+Here is a full pipeline around GAM:
+
+```{r}
+run_plan <- function(df, cs = NULL, am = NULL, gap = 1, x = 1) {
+  require(magrittr)
+  
+  var_names <- setdiff(names(df), c("arm", "farm", "flock", "week", "nb_chicken", "nb_chicken_sold", "chicken_disease_death", "chicken_sudden_death"))
+  if (is.null(cs)) cs <- list(grep("_use$", var_names, value = TRUE, invert = TRUE))
+  else if (! is.list(cs)) cs <- list(cs)
+  if (is.null(am)) am <- list(grep("_use$", var_names, value = TRUE))
+  else if (! is.list(am)) am <- list(am)
+  
+  expand.grid(cs = cs, am = am, gap = gap, x = x) %>%
+    tibble::as_tibble() %>%
+    assign("plan", ., 1) %>% # saving intermediate value
+    c(FUN = purrr::safely(pipeline_gam), ., MoreArgs = list(list(df = df)), SIMPLIFY = FALSE, mc.cores = 4) %>%
+    do.call(parallel::mcmapply, .) %>% 
+    lapply(function(x) x$result) %>%
+    assign("results", ., 1) %>% 
+    sapply(is.null) %>% 
+    `[<-`(results, ., list(c("n" = NA, "or" = NA, "p" = NA, "ci.2.5%" = NA, "ci.97.5%" = NA))) %>% 
+    do.call(dplyr::bind_rows, .) %>% 
+    dplyr::bind_cols(plan, .)
+}
+```
+
+Let's try it:
+
+```{r}
+a <- run_plan(viparc, list(c("malaise", "diarrhoea"),
+                           c("respiratory", "cns")),
+                      list(c("colistin_use", "oxytetracycline_use"),
+                           c("apramycin_use", "cefadroxil_use")))
+```
+
+The following function develops the list of clinical signs and / or
+antimicrobials so that they can easily be read in the data frame:
+
+```{r}
+develop <- function(df, var = NULL) {
+  names_df <- names(df)
+  var_ref <- c("cs", "am")
+  if (is.null(var)) var <- intersect(names_df, var_ref)
+  stopifnot(var %in% names_df)
+  stopifnot(var %in% var_ref)
+  dplyr::mutate_at(df, var, ~ sapply(., paste, collapse = ", "))
+}
+```
+
+The second one removes the columns that contain no variability:
+
+```{r}
+simplify <- function(df) {
+  df[, sapply(df, function(x) length(unique(x))) > 1]
+}
+```
+
+Let's try them:
+
+```{r}
+develop(a)
+```
+
+and
+
+```{r}
+simplify(a)
+```
+
+and
+
+```{r}
+simplify(develop(a))
+```
+
+### Generating tables
+
+Let's download the data on the antimicrobials classes:
+
+```{r eval = FALSE}
+ab_classes <- readr::read_csv("https://raw.githubusercontent.com/viparc/clires_data/master/data/antimicrobial_classes.csv", col_types = "cc")
+ab_classes$antimicrobial <- paste0(ab_classes$antimicrobial, "_use")
+```
+
+```{r include = FALSE}
+ab_classes <- readr::read_csv("../clires_data/data/antimicrobial_classes.csv", col_types = "cc")
+ab_classes$antimicrobial <- paste0(ab_classes$antimicrobial, "_use")
+```
+
+It looks like this:
+
+```{r}
+ab_classes
+```
+
+Takes 15':
+
+```{r eval = FALSE}
+tmp <- run_plan(df = viparc,
+                cs = as.list(setdiff(grep("_use$", names(viparc), value = TRUE, invert = TRUE),
+                                     c("farm", "flock", "week", "nb_chicken", "nb_chicken_sold",
+                                       "chicken_disease_death", "chicken_sudden_death"))),
+                am = split(ab_classes$antimicrobial, ab_classes$class),
+                gap = 0:2,
+                x = 0:2) %>% 
+  dplyr::mutate(cs = unlist(cs),
+                am = names(am)) %>% 
+  dplyr::rename(clinical_signs = cs,
+                class = am)
+```
+
+```{r eval = FALSE, include = FALSE}
+saveRDS(tmp, "therapeutic.rds")
+```
 
