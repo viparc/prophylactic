@@ -139,7 +139,7 @@ the definition of the sets of antimicrobials and clinical signs to consider:
 
 Installing the required packages:
 
-```{r}
+```{r starts here}
 installed_packages <- row.names(installed.packages())
 required <- c("dplyr", "magrittr", "mgcv", "purrr", "readr")
 to_install <- setdiff(required, installed_packages)
@@ -1076,6 +1076,6 @@ writeLines(script[-(seq_len(which(grepl("starts here", script))),
 To execute the code:
 
 ```{r eval = FALSE}
-source("prophylactic")
+source("prophylactic.R")
 ```
 
