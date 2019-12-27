@@ -1045,7 +1045,7 @@ tmp %>%
 
 The analyses were performed on the system and versions as defined below:
 
-```{r}
+```{r session_info}
 sessionInfo(required)
 ```
 
@@ -1057,7 +1057,7 @@ same or more recent than the ones listed above.
 
 You can download the R markdown file used to generate this page as so:
 
-```{r ends here, eval = FALSE}
+```{r eval = FALSE}
 download.file("https://raw.githubusercontent.com/viparc/prophylactic/master/analysis.Rmd", "prophylactic.Rmd")
 ```
 
@@ -1068,8 +1068,8 @@ named `prophylactic.R` as so:
 if (!require("kintr")) install.packages("knitr")
 knitr::purl("prophylactic.Rmd")
 script <- readLines("prophylactic.R")
-writeLines(script[-(seq_len(which(grepl("starts here", script))),
-                    which(grepl("ends here", script)):length(script))],
+writeLines(script[-c(seq_len(which(grepl("starts here", script))[1]),
+                     which(grepl("session_ino", script))[1]:length(script))],
            "prophylactic.R")
 ```
 
