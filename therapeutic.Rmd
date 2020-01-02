@@ -37,7 +37,7 @@ options(width = 137)
 ## Sketch out of the analysis
 
 As for the analysis of the
-[prophylactic AMU](https://viparc.github.io/prophylactic/analysis.html), the
+[prophylactic AMU](https://viparc.github.io/prophylactic/prophylactic.html), the
 main difficulty here consists in rearranging the data. Once the data is properly
 rearranged, then the analysis is pretty classical. In this section we sketch out
 the rationale of our analysis.
@@ -729,17 +729,19 @@ ab_classes
 Takes 15':
 
 ```{r eval = FALSE}
+system.time(
 tmp <- run_plan(df = viparc,
                 cs = as.list(setdiff(grep("_use$", names(viparc), value = TRUE, invert = TRUE),
                                      c("farm", "flock", "week", "nb_chicken", "nb_chicken_sold",
                                        "chicken_disease_death", "chicken_sudden_death"))),
                 am = split(ab_classes$antimicrobial, ab_classes$class),
                 gap = 0:2,
-                x = 0:2) %>% 
+                x = 1:3) %>% 
   dplyr::mutate(cs = unlist(cs),
                 am = names(am)) %>% 
   dplyr::rename(clinical_signs = cs,
                 class = am)
+)
 ```
 
 ```{r eval = FALSE, include = FALSE}
