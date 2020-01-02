@@ -1,5 +1,5 @@
 ---
-title: "Does the AMU prophylactic use increase the susceptibility to infections?"
+title: "Does prophylactic AMU increase the susceptibility to infections?"
 output:
   html_document:
     theme: cerulean
@@ -144,8 +144,10 @@ installed_packages <- row.names(installed.packages())
 required <- c("dplyr", "magrittr", "mgcv", "purrr", "readr")
 to_install <- setdiff(required, installed_packages)
 if (length(to_install)) install.packages(to_install)
-if (length(setdiff("mgcv.helper", installed_packages))) {
-  if (length(setdiff("remotes", installed_packages))) install.packages("remotes")
+if (! require("mgcv.helper")) {
+#if (length(setdiff("mgcv.helper", installed_packages))) {
+  if (! require("remotes")) install.packages("remotes")
+#  if (length(setdiff("remotes", installed_packages))) install.packages("remotes")
   remotes::install_github("samclifford/mgcv.helper")
 }
 ```
@@ -160,14 +162,14 @@ library(magrittr)
 
 ```{r eval = FALSE}
 viparc <- readr::read_csv("https://raw.githubusercontent.com/viparc/prophylactic/master/data/viparc_qualitative.csv",
-                          col_types = paste(c("ciiidd", rep("l", 51)), collapse = "")) %>% 
-  dplyr::select(-nb_chicken, -chicken_disease_death, -chicken_sudden_death)
+                          col_types = paste(c("ciiiddd", rep("l", 51)), collapse = "")) %>% 
+  dplyr::select(-nb_chicken, -chicken_disease_death, -chicken_sudden_death, -nb_chicken_sold)
 ```
 
 ```{r eval = TRUE, include = FALSE}
 viparc <- readr::read_csv("data/viparc_qualitative.csv",
-                          col_types = paste(c("ciiidd", rep("l", 51)), collapse = "")) %>% 
-  dplyr::select(-nb_chicken, -chicken_disease_death, -chicken_sudden_death)
+                          col_types = paste(c("ciiiddd", rep("l", 51)), collapse = "")) %>% 
+  dplyr::select(-nb_chicken, -chicken_disease_death, -chicken_sudden_death, -nb_chicken_sold)
 ```
 
 We have 3 types of variables in this data frame:
