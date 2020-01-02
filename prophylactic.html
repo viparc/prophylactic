@@ -1541,7 +1541,7 @@ html { overflow-x: scroll; }
 <li><p><a href="#GLM"><strong>logistic regression</strong></a>. Here, we compared correction by partial likelihood ratio tests and <strong>stratification</strong>. It produces similar results. Because the effect of age on the occurence of clinical signs may be non-linear we also considered</p></li>
 <li><p><a href="#GAM"><strong>general additive models</strong></a> in order to model the age - outcome relationship in an as flexible way as possible. After the preliminary analyses shown below, it is this option that we selected for full analysis.</p></li>
 </ul>
-<p>We then developped an number of <a href="#pipelines">pipelines</a> combining both data preparation and data analysis. <code>pipeline1()</code> is based on the Fisher exact test, <code>pipeline3()</code> is based on the GLM and <code>pipeline5()</code> is based on the GAM. <code>pipeline2()</code>, <code>pipeline4()</code> and <code>pipeline6()</code> are the same as <code>pipeline1()</code>, <code>pipeline3()</code> and <code>pipeline5()</code> respectively, with simplified interfaces. At the <a href="#end">end</a>, we created 3 functions that allows to explore the exposure - outcome relationships using various choices for the definitions of the duration of the first week, the filtering periods and the observation period, as well as the definition of the sets of antimicrobials and clinical signs to consider:</p>
+<p>We then developped a number of <a href="#pipelines">pipelines</a> combining both data preparation and data analysis. <code>pipeline1()</code> is based on the Fisher exact test, <code>pipeline3()</code> is based on the GLM and <code>pipeline5()</code> is based on the GAM. <code>pipeline2()</code>, <code>pipeline4()</code> and <code>pipeline6()</code> are the same as <code>pipeline1()</code>, <code>pipeline3()</code> and <code>pipeline5()</code> respectively, with simplified interfaces. At the <a href="#end">end</a>, we created 3 functions that allows to explore the exposure - outcome relationships using various choices for the definitions of the duration of the first week, the filtering periods and the observation period, as well as the definition of the sets of antimicrobials and clinical signs to consider:</p>
 <ul>
 <li><p><code>run_plan(pipeline, df, ...)</code> runs the pipeline <code>pipeline</code> on the data frame <code>df</code> using the sets of parameters as defined by <code>...</code>.</p></li>
 <li><p><code>develop()</code> and <code>simplify()</code> allow to manipulate the output of <code>run_plan()</code>.</p></li>
@@ -1555,9 +1555,7 @@ required &lt;- c(&quot;dplyr&quot;, &quot;magrittr&quot;, &quot;mgcv&quot;, &quo
 to_install &lt;- setdiff(required, installed_packages)
 if (length(to_install)) install.packages(to_install)
 if (! require(&quot;mgcv.helper&quot;)) {
-#if (length(setdiff(&quot;mgcv.helper&quot;, installed_packages))) {
   if (! require(&quot;remotes&quot;)) install.packages(&quot;remotes&quot;)
-#  if (length(setdiff(&quot;remotes&quot;, installed_packages))) install.packages(&quot;remotes&quot;)
   remotes::install_github(&quot;samclifford/mgcv.helper&quot;)
 }</code></pre>
 <p>Loading <code>magrittr</code> for interactive use:</p>
@@ -2954,13 +2952,13 @@ ab_classes$antimicrobial &lt;- paste0(ab_classes$antimicrobial, &quot;_use&quot;
 <div id="running-the-script-locally" class="section level2">
 <h2>Running the script locally</h2>
 <p>You can download the R markdown file used to generate this page as so:</p>
-<pre class="r"><code>download.file(&quot;https://raw.githubusercontent.com/viparc/prophylactic/master/analysis.Rmd&quot;, &quot;prophylactic.Rmd&quot;)</code></pre>
+<pre class="r"><code>download.file(&quot;https://raw.githubusercontent.com/viparc/prophylactic/master/prophylactic.Rmd&quot;, &quot;prophylactic.Rmd&quot;)</code></pre>
 <p>You can transforme this <code>prophylactic.Rmd</code> R markdown document in an R script named <code>prophylactic.R</code> as so:</p>
 <pre class="r"><code>if (!require(&quot;kintr&quot;)) install.packages(&quot;knitr&quot;)
 knitr::purl(&quot;prophylactic.Rmd&quot;)
 script &lt;- readLines(&quot;prophylactic.R&quot;)
 writeLines(script[-c(seq_len(which(grepl(&quot;starts here&quot;, script))[1]),
-                     which(grepl(&quot;session_ino&quot;, script))[1]:length(script))],
+                     which(grepl(&quot;session_info&quot;, script))[1]:length(script))],
            &quot;prophylactic.R&quot;)</code></pre>
 <p>To execute the code:</p>
 <pre class="r"><code>source(&quot;prophylactic.R&quot;)</code></pre>

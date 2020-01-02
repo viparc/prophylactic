@@ -120,7 +120,7 @@ we also considered
 relationship in an as flexible way as possible. After the preliminary analyses
 shown below, it is this option that we selected for full analysis.
 
-We then developped an number of [pipelines](#pipelines) combining both data
+We then developped a number of [pipelines](#pipelines) combining both data
 preparation and data analysis. `pipeline1()` is based on the Fisher exact test,
 `pipeline3()` is based on the GLM and `pipeline5()` is based on the GAM.
 `pipeline2()`, `pipeline4()` and `pipeline6()` are the same as `pipeline1()`,
@@ -145,9 +145,7 @@ required <- c("dplyr", "magrittr", "mgcv", "purrr", "readr")
 to_install <- setdiff(required, installed_packages)
 if (length(to_install)) install.packages(to_install)
 if (! require("mgcv.helper")) {
-#if (length(setdiff("mgcv.helper", installed_packages))) {
   if (! require("remotes")) install.packages("remotes")
-#  if (length(setdiff("remotes", installed_packages))) install.packages("remotes")
   remotes::install_github("samclifford/mgcv.helper")
 }
 ```
@@ -1060,7 +1058,7 @@ same or more recent than the ones listed above.
 You can download the R markdown file used to generate this page as so:
 
 ```{r eval = FALSE}
-download.file("https://raw.githubusercontent.com/viparc/prophylactic/master/analysis.Rmd", "prophylactic.Rmd")
+download.file("https://raw.githubusercontent.com/viparc/prophylactic/master/prophylactic.Rmd", "prophylactic.Rmd")
 ```
 
 You can transforme this `prophylactic.Rmd` R markdown document in an R script
@@ -1071,7 +1069,7 @@ if (!require("kintr")) install.packages("knitr")
 knitr::purl("prophylactic.Rmd")
 script <- readLines("prophylactic.R")
 writeLines(script[-c(seq_len(which(grepl("starts here", script))[1]),
-                     which(grepl("session_ino", script))[1]:length(script))],
+                     which(grepl("session_info", script))[1]:length(script))],
            "prophylactic.R")
 ```
 
