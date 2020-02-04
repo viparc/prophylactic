@@ -534,12 +534,27 @@ for the GLM method and
 
 ```{r}
 get_outputs.gam <- function(x, level = .95) {
+  data <- x$model
+  m <- cbind(as.data.frame(data[[1]]), arm = data$arm) %>%
+    group_by(arm) %>%
+    summarise_all(sum) %>%
+    tibble::column_to_rownames("arm") %>%
+    as.matrix() %>%
+    as.table()
   summ <- summary(x)
   conf_int <- mgcv.helper::confint.gam(x, level = level)
-  c(n    = nrow(x$model),
-    or   = unname(tail(summ$p.coef, 1)),
-    p    = unname(tail(summ$p.pv, 1)),
-    ci   = unlist(conf_int[nrow(conf_int), 5:6]))
+  list(n    = data %>%
+         group_by(arm) %>%
+         tally() %>%
+         tibble::column_to_rownames("arm") %>%
+         t() %>%
+         as.data.frame() %>%
+         unlist(),
+       ct   = addmargins(m),
+       prob = round(sweep(m, 1, rowSums(m), "/"), 2),
+       or   = unname(tail(summ$p.coef, 1)),
+       p    = unname(tail(summ$p.pv, 1)),
+       ci   = unlist(conf_int[nrow(conf_int), 5:6]))
 }
 ```
 
