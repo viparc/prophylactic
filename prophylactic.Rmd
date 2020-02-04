@@ -875,13 +875,26 @@ Let's make a function out of this above code:
 ```{r}
 run_plan <- function(f, df, clinical_signs = NULL, antimicrobials = NULL, filtering = 1, watching = 1, first_wks = 1, nb_cores = 1) {
   require(magrittr)
-  
-  var_names <- setdiff(names(df), c("farm", "flock", "week"))
-  if (is.null(antimicrobials)) antimicrobials <- list(grep("_use$", var_names, value = TRUE))
+
+  var_names <- setdiff(names(df), c("farm", "flock", "week"))  
+  all_antimicrobials <- list(grep("_use$", var_names, value = TRUE))
+  all_clinical_signs <- list(grep("_use$", var_names, value = TRUE, invert = TRUE))
+
+  if (is.null(antimicrobials)) antimicrobials <- all_antimicrobials
   else if (! is.list(antimicrobials)) antimicrobials <- list(antimicrobials)
-  if (is.null(clinical_signs)) clinical_signs <- list(grep("_use$", var_names, value = TRUE, invert = TRUE))
+  if (is.null(clinical_signs)) clinical_signs <- all_clinical_signs
   else if (! is.list(clinical_signs)) clinical_signs <- list(clinical_signs)
   
+  is_na <- function(x) {
+    if (length(x) > 1) return(FALSE)
+    is.na(x)
+  }
+  sel <- which(sapply(antimicrobials, is_na))
+  if (length(sel)) antimicrobials[sel] <- all_antimicrobials
+  sel <- which(sapply(clinical_signs, is_na))
+  if (length(sel)) clinical_signs[sel] <- all_clinical_signs
+  rm(is_na, sel, all_antimicrobials, all_clinical_signs, var_names)
+
   run <- function(x) {
     if (nb_cores < 2) return(purrr::pmap(x, f, df = df))
     c(FUN = f, x, MoreArgs = list(list(df = df)), SIMPLIFY = FALSE, mc.cores = nb_cores) %>% 
@@ -890,7 +903,7 @@ run_plan <- function(f, df, clinical_signs = NULL, antimicrobials = NULL, filter
   
   environment() %>% 
     as.list() %>% 
-    `[<-`(c("f", "df", "var_names", "run", "nb_cores"), NULL) %>% 
+    `[<-`(c("f", "df", "run", "nb_cores"), NULL) %>% 
     expand.grid() %>% 
     assign("plan", ., 1) %>% # saving intermediate value
     run() %>% 
@@ -1012,18 +1025,41 @@ ab_classes
 
 We can use the `run_plan()` function to compute odds ratios across
 antimicrobials classes, clinical signs and values 1 to 3 for the durations in
-weeks of the initial, filtering and watching periods (it takes about 10' to run
+weeks of the initial, filtering and watching periods (it takes about 15' to run
 on 3 cores):
 
 ```{r eval = FALSE}
+all_cs <- function(x) {
+  sel <- sapply(x, length)
+  x[which(sel > 1)] <- "all"
+  x
+}
+
+replace_empty <- function(x) {
+  x[which(x == "")] <- "all"
+  x
+}
+
 tmp <- run_plan(pipeline6, viparc, filtering = 1:3, watching = 1:3,
-                antimicrobials = split(ab_classes$antimicrobial, ab_classes$class),
-                clinical_signs = as.list(setdiff(grep("_use$", names(viparc), value = TRUE, invert = TRUE), c("farm", "flock", "week"))),
+                antimicrobials = c(split(ab_classes$antimicrobial, ab_classes$class), NA),
+                clinical_signs = c(as.list(setdiff(grep("_use$", names(viparc), value = TRUE, invert = TRUE), c("farm", "flock", "week"))), NA),
                 first_wks = 1:3, nb_cores = 3) %>% 
-  dplyr::mutate(clinical_signs = unlist(clinical_signs),
-                antimicrobials = names(antimicrobials)) %>% 
+  dplyr::mutate(clinical_signs = unlist(all_cs(clinical_signs)),
+                antimicrobials = replace_empty(names(antimicrobials))) %>% 
   dplyr::rename(class = antimicrobials)
 ```
+
+```{r}
+tmp <- names(tmp$antimicrobials)
+```
+
+
+```{r}
+cs <- tmp$clinical_signs
+sel <- sapply(tmp$clinical_signs, length)
+cs[which(sel > 1)] <- "all"
+```
+
 
 We can the split this output by the durations of the initial, filtering and
 watching periods, and spread the data to show antimicrobials classes in rows and

@@ -2718,13 +2718,26 @@ cs_set &lt;- c(&quot;malaise&quot;, &quot;diarrhoea&quot;)</code></pre>
 <p>Let’s make a function out of this above code:</p>
 <pre class="r"><code>run_plan &lt;- function(f, df, clinical_signs = NULL, antimicrobials = NULL, filtering = 1, watching = 1, first_wks = 1, nb_cores = 1) {
   require(magrittr)
-  
-  var_names &lt;- setdiff(names(df), c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;))
-  if (is.null(antimicrobials)) antimicrobials &lt;- list(grep(&quot;_use$&quot;, var_names, value = TRUE))
+
+  var_names &lt;- setdiff(names(df), c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;))  
+  all_antimicrobials &lt;- list(grep(&quot;_use$&quot;, var_names, value = TRUE))
+  all_clinical_signs &lt;- list(grep(&quot;_use$&quot;, var_names, value = TRUE, invert = TRUE))
+
+  if (is.null(antimicrobials)) antimicrobials &lt;- all_antimicrobials
   else if (! is.list(antimicrobials)) antimicrobials &lt;- list(antimicrobials)
-  if (is.null(clinical_signs)) clinical_signs &lt;- list(grep(&quot;_use$&quot;, var_names, value = TRUE, invert = TRUE))
+  if (is.null(clinical_signs)) clinical_signs &lt;- all_clinical_signs
   else if (! is.list(clinical_signs)) clinical_signs &lt;- list(clinical_signs)
   
+  is_na &lt;- function(x) {
+    if (length(x) &gt; 1) return(FALSE)
+    is.na(x)
+  }
+  sel &lt;- which(sapply(antimicrobials, is_na))
+  if (length(sel)) antimicrobials[sel] &lt;- all_antimicrobials
+  sel &lt;- which(sapply(clinical_signs, is_na))
+  if (length(sel)) clinical_signs[sel] &lt;- all_clinical_signs
+  rm(is_na, sel, all_antimicrobials, all_clinical_signs, var_names)
+
   run &lt;- function(x) {
     if (nb_cores &lt; 2) return(purrr::pmap(x, f, df = df))
     c(FUN = f, x, MoreArgs = list(list(df = df)), SIMPLIFY = FALSE, mc.cores = nb_cores) %&gt;% 
@@ -2733,7 +2746,7 @@ cs_set &lt;- c(&quot;malaise&quot;, &quot;diarrhoea&quot;)</code></pre>
   
   environment() %&gt;% 
     as.list() %&gt;% 
-    `[&lt;-`(c(&quot;f&quot;, &quot;df&quot;, &quot;var_names&quot;, &quot;run&quot;, &quot;nb_cores&quot;), NULL) %&gt;% 
+    `[&lt;-`(c(&quot;f&quot;, &quot;df&quot;, &quot;run&quot;, &quot;nb_cores&quot;), NULL) %&gt;% 
     expand.grid() %&gt;% 
     assign(&quot;plan&quot;, ., 1) %&gt;% # saving intermediate value
     run() %&gt;% 
@@ -2896,14 +2909,29 @@ ab_classes$antimicrobial &lt;- paste0(ab_classes$antimicrobial, &quot;_use&quot;
 ##  9 enrofloxacin_use quinolones    
 ## 10 flumequine_use   quinolones    
 ## # … with 34 more rows</code></pre>
-<p>We can use the <code>run_plan()</code> function to compute odds ratios across antimicrobials classes, clinical signs and values 1 to 3 for the durations in weeks of the initial, filtering and watching periods (it takes about 10’ to run on 3 cores):</p>
-<pre class="r"><code>tmp &lt;- run_plan(pipeline6, viparc, filtering = 1:3, watching = 1:3,
-                antimicrobials = split(ab_classes$antimicrobial, ab_classes$class),
-                clinical_signs = as.list(setdiff(grep(&quot;_use$&quot;, names(viparc), value = TRUE, invert = TRUE), c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;))),
+<p>We can use the <code>run_plan()</code> function to compute odds ratios across antimicrobials classes, clinical signs and values 1 to 3 for the durations in weeks of the initial, filtering and watching periods (it takes about 15’ to run on 3 cores):</p>
+<pre class="r"><code>all_cs &lt;- function(x) {
+  sel &lt;- sapply(x, length)
+  x[which(sel &gt; 1)] &lt;- &quot;all&quot;
+  x
+}
+
+replace_empty &lt;- function(x) {
+  x[which(x == &quot;&quot;)] &lt;- &quot;all&quot;
+  x
+}
+
+tmp &lt;- run_plan(pipeline6, viparc, filtering = 1:3, watching = 1:3,
+                antimicrobials = c(split(ab_classes$antimicrobial, ab_classes$class), NA),
+                clinical_signs = c(as.list(setdiff(grep(&quot;_use$&quot;, names(viparc), value = TRUE, invert = TRUE), c(&quot;farm&quot;, &quot;flock&quot;, &quot;week&quot;))), NA),
                 first_wks = 1:3, nb_cores = 3) %&gt;% 
-  dplyr::mutate(clinical_signs = unlist(clinical_signs),
-                antimicrobials = names(antimicrobials)) %&gt;% 
+  dplyr::mutate(clinical_signs = unlist(all_cs(clinical_signs)),
+                antimicrobials = replace_empty(names(antimicrobials))) %&gt;% 
   dplyr::rename(class = antimicrobials)</code></pre>
+<pre class="r"><code>tmp &lt;- names(tmp$antimicrobials)</code></pre>
+<pre class="r"><code>cs &lt;- tmp$clinical_signs
+sel &lt;- sapply(tmp$clinical_signs, length)
+cs[which(sel &gt; 1)] &lt;- &quot;all&quot;</code></pre>
 <p>We can the split this output by the durations of the initial, filtering and watching periods, and spread the data to show antimicrobials classes in rows and clinical signs in columns:</p>
 <pre class="r"><code>tmp %&gt;% 
   dplyr::mutate(or    = exp(or),
