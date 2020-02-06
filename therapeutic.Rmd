@@ -536,16 +536,16 @@ for the GLM method and
 get_outputs.gam <- function(x, level = .95) {
   data <- x$model
   m <- cbind(as.data.frame(data[[1]]), arm = data$arm) %>%
-    group_by(arm) %>%
-    summarise_all(sum) %>%
+    dplyr::group_by(arm) %>%
+    dplyr::summarise_all(sum) %>%
     tibble::column_to_rownames("arm") %>%
     as.matrix() %>%
     as.table()
   summ <- summary(x)
   conf_int <- mgcv.helper::confint.gam(x, level = level)
   list(n    = data %>%
-         group_by(arm) %>%
-         tally() %>%
+         dplyr::group_by(arm) %>%
+         dplyr::tally() %>%
          tibble::column_to_rownames("arm") %>%
          t() %>%
          as.data.frame() %>%
@@ -657,6 +657,42 @@ run_plan <- function(df, cs = NULL, am = NULL, gap = 1, x = 1) {
   else if (! is.list(cs)) cs <- list(cs)
   if (is.null(am)) am <- list(grep("_use$", var_names, value = TRUE))
   else if (! is.list(am)) am <- list(am)
+  
+  expand.grid(cs = cs, am = am, gap = gap, x = x) %>%
+    tibble::as_tibble() %>%
+    assign("plan", ., 1) %>% # saving intermediate value
+    c(FUN = purrr::safely(pipeline_gam), ., MoreArgs = list(list(df = df)), SIMPLIFY = FALSE, mc.cores = 4) %>%
+    do.call(parallel::mcmapply, .) %>% 
+    lapply(function(x) x$result) %>%
+    assign("results", ., 1) %>% 
+    sapply(is.null) %>% 
+    `[<-`(results, ., list(c("n" = NA, "or" = NA, "p" = NA, "ci.2.5%" = NA, "ci.97.5%" = NA))) %>% 
+    do.call(dplyr::bind_rows, .) %>% 
+    dplyr::bind_cols(plan, .)
+}
+```
+
+```{r}
+run_plan <- function(df, cs = NULL, am = NULL, gap = 1, x = 1) {
+  require(magrittr)
+  
+  var_names <- setdiff(names(df), c("arm", "farm", "flock", "week", "nb_chicken", "nb_chicken_sold", "chicken_disease_death", "chicken_sudden_death"))
+  all_antimicrobials <- list(grep("_use$", var_names, value = TRUE))
+  all_clinical_signs <- list(grep("_use$", var_names, value = TRUE, invert = TRUE))
+  
+  if (is.null(cs)) cs <- all_clinical_signs
+  else if (! is.list(cs)) cs <- list(cs)
+  if (is.null(am)) am <- all_antimicrobials
+  else if (! is.list(am)) am <- list(am)
+  
+  is_na <- function(x) {
+    if (length(x) > 1) return(FALSE)
+    is.na(x)
+  }
+  sel <- which(sapply(am, is_na))
+  if (length(sel)) am[sel] <- all_antimicrobials
+  sel <- which(sapply(cs, is_na))
+  if (length(sel)) cs[sel] <- all_clinical_signs
   
   expand.grid(cs = cs, am = am, gap = gap, x = x) %>%
     tibble::as_tibble() %>%
