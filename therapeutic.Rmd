@@ -635,42 +635,7 @@ and
 pipeline_gam(viparc, cs_set, am_set)
 ```
 
-
-```{r}
-a <- batch %>% 
-  tibble::as_tibble() %>%
-  assign("plan", ., 1) %>% # saving intermediate value
-  c(FUN = pipeline_gam, ., MoreArgs = list(list(df = viparc)), SIMPLIFY = FALSE, mc.cores = 3) %>%
-  do.call(parallel::mcmapply, .) %>% 
-  do.call(dplyr::bind_rows, .) %>% 
-  dplyr::bind_cols(plan, .)
-```
-
 Here is a full pipeline around GAM:
-
-```{r}
-run_plan <- function(df, cs = NULL, am = NULL, gap = 1, x = 1) {
-  require(magrittr)
-  
-  var_names <- setdiff(names(df), c("arm", "farm", "flock", "week", "nb_chicken", "nb_chicken_sold", "chicken_disease_death", "chicken_sudden_death"))
-  if (is.null(cs)) cs <- list(grep("_use$", var_names, value = TRUE, invert = TRUE))
-  else if (! is.list(cs)) cs <- list(cs)
-  if (is.null(am)) am <- list(grep("_use$", var_names, value = TRUE))
-  else if (! is.list(am)) am <- list(am)
-  
-  expand.grid(cs = cs, am = am, gap = gap, x = x) %>%
-    tibble::as_tibble() %>%
-    assign("plan", ., 1) %>% # saving intermediate value
-    c(FUN = purrr::safely(pipeline_gam), ., MoreArgs = list(list(df = df)), SIMPLIFY = FALSE, mc.cores = 4) %>%
-    do.call(parallel::mcmapply, .) %>% 
-    lapply(function(x) x$result) %>%
-    assign("results", ., 1) %>% 
-    sapply(is.null) %>% 
-    `[<-`(results, ., list(c("n" = NA, "or" = NA, "p" = NA, "ci.2.5%" = NA, "ci.97.5%" = NA))) %>% 
-    do.call(dplyr::bind_rows, .) %>% 
-    dplyr::bind_cols(plan, .)
-}
-```
 
 ```{r}
 run_plan <- function(df, cs = NULL, am = NULL, gap = 1, x = 1) {
@@ -702,19 +667,26 @@ run_plan <- function(df, cs = NULL, am = NULL, gap = 1, x = 1) {
     lapply(function(x) x$result) %>%
     assign("results", ., 1) %>% 
     sapply(is.null) %>% 
-    `[<-`(results, ., list(c("n" = NA, "or" = NA, "p" = NA, "ci.2.5%" = NA, "ci.97.5%" = NA))) %>% 
+    `[<-`(results, ., list(list("n" = setNames(as.integer(c(NA, NA)), c("before", "after")),
+                                "ct" = NA, "prob" = NA, "or" = NA, "p" = NA,
+                                "ci" = setNames(as.numeric(c(NA, NA)), c("2.5%", "97.5%"))))) %>% 
+    lapply(function(x) x %>% lapply(list)) %>%
+    lapply(tibble::as_tibble) %>%
     do.call(dplyr::bind_rows, .) %>% 
-    dplyr::bind_cols(plan, .)
+    dplyr::mutate_at(c("or", "p"), unlist) %>% 
+    dplyr::bind_cols(plan, .) %>% 
+    tidyr::unnest_wider(n) %>% 
+    tidyr::unnest_wider(ci)
 }
 ```
 
 Let's try it:
 
 ```{r}
-a <- run_plan(viparc, list(c("malaise", "diarrhoea"),
-                           c("respiratory", "cns")),
-                      list(c("colistin_use", "oxytetracycline_use"),
-                           c("apramycin_use", "cefadroxil_use")))
+(a <- run_plan(viparc, list(c("malaise", "diarrhoea"),
+                            c("respiratory", "cns"), NA),
+                       list(c("colistin_use", "oxytetracycline_use"),
+                            c("apramycin_use", "cefadroxil_use"), NA)))
 ```
 
 The following function develops the list of clinical signs and / or
@@ -780,19 +752,23 @@ ab_classes
 Takes 15':
 
 ```{r eval = FALSE}
-system.time(
+f <- function(x) {
+  sel <- which(sapply(x, length) > 1)
+  x[sel] <- "all"
+  x
+}
+
 tmp <- run_plan(df = viparc,
-                cs = as.list(setdiff(grep("_use$", names(viparc), value = TRUE, invert = TRUE),
-                                     c("farm", "flock", "week", "nb_chicken", "nb_chicken_sold",
-                                       "chicken_disease_death", "chicken_sudden_death"))),
-                am = split(ab_classes$antimicrobial, ab_classes$class),
+                cs = c(as.list(setdiff(grep("_use$", names(viparc), value = TRUE, invert = TRUE),
+                                       c("farm", "flock", "week", "nb_chicken", "nb_chicken_sold",
+                                         "chicken_disease_death", "chicken_sudden_death"))), NA),
+                am = c(split(ab_classes$antimicrobial, ab_classes$class), NA),
                 gap = 0:2,
                 x = 1:3) %>% 
-  dplyr::mutate(cs = unlist(cs),
-                am = names(am)) %>% 
+  dplyr::mutate(cs = unlist(f(cs)),
+                am = sub("^$", "all", names(am))) %>% 
   dplyr::rename(clinical_signs = cs,
                 class = am)
-)
 ```
 
 ```{r eval = FALSE, include = FALSE}
