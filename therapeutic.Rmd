@@ -775,3 +775,93 @@ tmp <- run_plan(df = viparc,
 saveRDS(tmp, "therapeutic.rds")
 ```
 
+## Table 1
+
+### by flock
+
+```{r}
+ab_list <- sort(unique(ab_classes$class))
+```
+
+```{r}
+by_flock0 <- function(data, class) {
+  data %>% 
+    filter(antibiotics == class) %>% 
+    group_by(farm, flock) %>% 
+    summarise(presence = sum(presence) > 0) %>% 
+    filter(presence) %>% 
+    nrow()
+}
+```
+
+```{r}
+by_flock0_all <- function(data) {
+  data %>%
+    select(-antibiotics) %>%
+    group_by(farm, flock) %>%
+    summarise(presence = sum(presence) > 0) %>%
+    filter(presence) %>%
+    nrow()
+}
+```
+
+```{r}
+rearrange_data <- function(gap, x) {
+  prepare_data(viparc, gap = gap, x = x) %>% 
+    filter(arm == "after") %>% 
+    select(farm, flock, week, ends_with("_use")) %>% 
+    tidyr::pivot_longer(ends_with("_use"), names_to = "antibiotics", values_to = "presence") %>% 
+    mutate(antibiotics = with(ab_classes, setNames(class, antimicrobial))[antibiotics]) %>% 
+    distinct()
+}
+```
+
+```{r}
+by_flock <- function(gap, x) {
+  tmp <- prepare_data(viparc, gap = gap, x = x) %>% 
+    filter(arm == "after") %>% 
+    select(farm, flock, week, ends_with("_use")) %>% 
+    tidyr::pivot_longer(ends_with("_use"), names_to = "antibiotics", values_to = "presence") %>% 
+    mutate(antibiotics = with(ab_classes, setNames(class, antimicrobial))[antibiotics]) %>% 
+    distinct()
+  c(purrr::map_int(ab_list, by_flock0, data = tmp), by_flock0_all(tmp))
+}
+```
+
+```{r}
+system.time(
+a <- expand.grid(gap = 0:2, x = 1:3) %$% 
+  purrr::map2_dfc(gap, x, by_flock)
+)
+```
+
+### by week
+
+```{r}
+by_week <- function(gap, x) {
+  tmp <- rearrange_data(gap, x)
+  a <- tmp %>%
+    filter(presence) %>% 
+    group_by(antibiotics) %>% 
+    tally() %>% 
+    filter(! is.na(antibiotics)) %>% # because for some combinations of gap and x, the antibiotic may not be known
+    pull(n)
+  b <- tmp %>% 
+    filter(presence) %>%
+    select(-antibiotics) %>%
+    group_by(farm, flock, week) %>%
+    summarise(presence = sum(presence) > 0) %>%
+    filter(presence) %>%
+    nrow()
+  c(a, b)
+}
+```
+
+```{r}
+system.time(
+b <- expand.grid(gap = 0:2, x = 1:3) %$% 
+  purrr::map2_dfc(gap, x, by_week)
+)
+```
+
+
