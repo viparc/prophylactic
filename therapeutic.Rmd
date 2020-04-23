@@ -808,22 +808,23 @@ by_flock0_all <- function(data) {
 ```{r}
 rearrange_data <- function(gap, x) {
   prepare_data(viparc, gap = gap, x = x) %>% 
-    filter(arm == "after") %>% 
-    select(farm, flock, week, ends_with("_use")) %>% 
+    dplyr::filter(arm == "after") %>% 
+    dplyr::select(farm, flock, week, ends_with("_use")) %>% 
     tidyr::pivot_longer(ends_with("_use"), names_to = "antibiotics", values_to = "presence") %>% 
-    mutate(antibiotics = with(ab_classes, setNames(class, antimicrobial))[antibiotics]) %>% 
-    distinct()
+    dplyr::mutate(antibiotics = with(ab_classes, setNames(class, antimicrobial))[antibiotics]) %>% 
+    dplyr::distinct()
 }
 ```
 
 ```{r}
 by_flock <- function(gap, x) {
-  tmp <- prepare_data(viparc, gap = gap, x = x) %>% 
-    filter(arm == "after") %>% 
-    select(farm, flock, week, ends_with("_use")) %>% 
-    tidyr::pivot_longer(ends_with("_use"), names_to = "antibiotics", values_to = "presence") %>% 
-    mutate(antibiotics = with(ab_classes, setNames(class, antimicrobial))[antibiotics]) %>% 
-    distinct()
+#  tmp <- prepare_data(viparc, gap = gap, x = x) %>% 
+#    dplyr::filter(arm == "after") %>% 
+#    dplyr::select(farm, flock, week, ends_with("_use")) %>% 
+#    tidyr::pivot_longer(ends_with("_use"), names_to = "antibiotics", values_to = "presence") %>% 
+#    dplyr::mutate(antibiotics = with(ab_classes, setNames(class, antimicrobial))[antibiotics]) %>% 
+#    dplyr::distinct()
+  tmp <- rearrange_data(gap, x)
   c(purrr::map_int(ab_list, by_flock0, data = tmp), by_flock0_all(tmp))
 }
 ```
@@ -840,22 +841,34 @@ a <- expand.grid(gap = 0:2, x = 1:3) %$%
 ```{r}
 by_week <- function(gap, x) {
   tmp <- rearrange_data(gap, x)
+  template <- tmp %>% 
+    dplyr::select(antibiotics) %>% 
+    dplyr::distinct() %>% 
+    na.exclude() %>% 
+    dplyr::arrange(antibiotics)
   a <- tmp %>%
-    filter(presence) %>% 
-    group_by(antibiotics) %>% 
-    tally() %>% 
-    filter(! is.na(antibiotics)) %>% # because for some combinations of gap and x, the antibiotic may not be known
-    pull(n)
+    dplyr::filter(presence) %>% 
+    dplyr::group_by(antibiotics) %>% 
+    dplyr::tally() %>% 
+    dplyr::right_join(template, "antibiotics") %>% 
+#    dplyr::filter(! is.na(antibiotics)) %>% # because for some combinations of gap and x, the antibiotic may not be known
+    dplyr::pull(n) %>% 
+    tidyr::replace_na(0)
   b <- tmp %>% 
-    filter(presence) %>%
-    select(-antibiotics) %>%
-    group_by(farm, flock, week) %>%
-    summarise(presence = sum(presence) > 0) %>%
-    filter(presence) %>%
+    dplyr::filter(presence) %>%
+    dplyr::select(-antibiotics) %>%
+    dplyr::group_by(farm, flock, week) %>%
+    dplyr::summarise(presence = sum(presence) > 0) %>%
+    dplyr::filter(presence) %>%
     nrow()
   c(a, b)
 }
 ```
+
+```{r}
+by_week(0, 1)
+```
+
 
 ```{r}
 system.time(
