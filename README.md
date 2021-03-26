@@ -1,6 +1,6 @@
 # Effects of prophylactic and therapeutic AMU
 
-[![DOI](https://zenodo.org/badge/177768619.svg)](https://zenodo.org/badge/latestdoi/177768619)
+[![DOI](https://zenodo.org/badge/178162348.svg)](https://zenodo.org/badge/latestdoi/178162348)
 
 In this study we have two separate analyses.
 
