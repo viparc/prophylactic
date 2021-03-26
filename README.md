@@ -1,5 +1,7 @@
 # Effects of prophylactic and therapeutic AMU
 
+[![DOI](https://zenodo.org/badge/177768619.svg)](https://zenodo.org/badge/latestdoi/177768619)
+
 In this study we have two separate analyses.
 
 The [first one](https://viparc.github.io/prophylactic/prophylactic.html) looks
